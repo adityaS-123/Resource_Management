@@ -1,0 +1,1 @@
+UPDATE ResourceField SET fieldType = 'NUMBER' WHERE fieldType = 'number';
