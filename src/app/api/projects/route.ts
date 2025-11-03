@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { sendEmail } from '@/lib/email'
 
 export async function GET() {
   try {
@@ -88,13 +89,20 @@ export async function POST(request: NextRequest) {
 
     // Find users by email if provided
     let users: { id: string; email: string; name: string | null }[] = []
+    let unregisteredEmails: string[] = []
+    
     if (userEmails && userEmails.length > 0) {
+      // Find registered users
       users = await prisma.user.findMany({
         where: {
           email: { in: userEmails },
           role: 'USER'
         }
       })
+      
+      // Find unregistered emails
+      const registeredEmails = users.map(user => user.email)
+      unregisteredEmails = userEmails.filter((email: string) => !registeredEmails.includes(email))
     }
 
     const project = await prisma.project.create({
@@ -114,9 +122,66 @@ export async function POST(request: NextRequest) {
         },
         users: {
           select: { id: true, name: true, email: true }
+        },
+        phases: {
+          include: {
+            resources: true
+          }
         }
       }
     })
+
+    // Handle invitations for unregistered users
+    if (unregisteredEmails.length > 0) {
+      // Create invitations
+      const invitations = unregisteredEmails.map(email => ({
+        email,
+        projectId: project.id,
+        invitedById: session.user.id
+      }))
+      
+      await prisma.projectInvitation.createMany({
+        data: invitations
+      })
+      
+      // Send invitation emails
+      const inviteUrl = `${process.env.NEXTAUTH_URL}/login`
+      
+      for (const email of unregisteredEmails) {
+        try {
+          await sendEmail(email, {
+            projectName: project.name,
+            client: project.client,
+            startDate: project.startDate.toISOString(),
+            endDate: project.endDate.toISOString(),
+            phases: project.phases.map(phase => ({
+              name: phase.name,
+              duration: phase.duration,
+              resources: phase.resources.map(resource => ({
+                identifier: resource.identifier,
+                resourceType: resource.resourceType,
+                quantity: resource.quantity,
+                configuration: resource.configuration
+              }))
+            })),
+            inviteUrl
+          })
+          
+          // Mark email as sent
+          await prisma.projectInvitation.updateMany({
+            where: {
+              email,
+              projectId: project.id
+            },
+            data: {
+              emailSent: true
+            }
+          })
+        } catch (emailError) {
+          console.error(`Failed to send invitation to ${email}:`, emailError)
+        }
+      }
+    }
 
     return NextResponse.json(project, { status: 201 })
   } catch (error) {

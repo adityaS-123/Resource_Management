@@ -357,7 +357,7 @@ export default function UserDashboard() {
                             </div>
                             <div className="text-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
                               <div className="text-lg font-bold text-purple-600 dark:text-purple-400">${totalCost.toLocaleString()}</div>
-                              <div className="text-xs text-purple-600 dark:text-purple-400">Budget</div>
+                              <div className="text-xs text-purple-600 dark:text-purple-400"></div>
                             </div>
                           </div>
 

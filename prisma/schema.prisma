@@ -51,6 +51,7 @@ model User {
   assignedProjects Project[] @relation("ProjectUsers")
   resourceRequests ResourceRequest[]
   approvedRequests ResourceRequest[] @relation("ApprovedBy")
+  sentInvitations ProjectInvitation[] @relation("InvitedBy")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -73,6 +74,7 @@ model Project {
   createdBy      User           @relation("CreatedProjects", fields: [createdById], references: [id])
   phases         Phase[]
   users          User[]         @relation("ProjectUsers")
+  invitations    ProjectInvitation[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 }
@@ -88,6 +90,8 @@ model Phase {
   resourceRequests ResourceRequest[]
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
+
+  @@unique([projectId, name])
 }
 
 model ResourceTemplate {
@@ -122,6 +126,7 @@ model ResourceField {
 
 model Resource {
   id                 String           @id @default(cuid())
+  identifier         String?          // e.g. "VM-1a", "VM-1b", "Storage-2a" - unique identifier within phase
   resourceType       String           @default("General Resource") // e.g. "Virtual Machine", "Database", "Load Balancer" - completely flexible
   resourceTemplateId String?          // Optional - for backward compatibility
   resourceTemplate   ResourceTemplate? @relation(fields: [resourceTemplateId], references: [id])
@@ -176,4 +181,25 @@ enum ResourceFieldType {
   EMAIL
   URL
   TEXTAREA
+}
+
+model ProjectInvitation {
+  id          String   @id @default(cuid())
+  email       String
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitedById String
+  invitedBy   User     @relation("InvitedBy", fields: [invitedById], references: [id])
+  status      InvitationStatus @default(PENDING)
+  emailSent   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([email, projectId])
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
 }

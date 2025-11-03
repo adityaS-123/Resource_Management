@@ -61,9 +61,24 @@ export async function POST(
       )
     }
 
+    // Check if a phase with the same name already exists in this project
+    const existingPhase = await prisma.phase.findFirst({
+      where: {
+        projectId: id,
+        name: name.trim()
+      }
+    })
+
+    if (existingPhase) {
+      return NextResponse.json(
+        { error: 'A phase with this name already exists in this project' },
+        { status: 400 }
+      )
+    }
+
     const phase = await prisma.phase.create({
       data: {
-        name,
+        name: name.trim(),
         duration: parseInt(duration),
         allocatedCost: 0, // Default to 0 since we removed cost tracking
         projectId: id

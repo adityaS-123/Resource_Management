@@ -62,6 +62,55 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role as string
       }
       return session
+    },
+    async signIn({ user, account, profile }) {
+      // Process pending invitations when user signs in
+      if (user?.email) {
+        try {
+          // Find pending invitations for this user's email
+          const pendingInvitations = await prisma.projectInvitation.findMany({
+            where: {
+              email: user.email,
+              status: 'PENDING'
+            }
+          })
+
+          if (pendingInvitations.length > 0) {
+            // Add user to all projects they were invited to
+            const projectIds = pendingInvitations.map(inv => inv.projectId)
+            
+            for (const projectId of projectIds) {
+              // Add user to project
+              await prisma.project.update({
+                where: { id: projectId },
+                data: {
+                  users: {
+                    connect: { id: user.id }
+                  }
+                }
+              })
+            }
+
+            // Mark invitations as accepted
+            await prisma.projectInvitation.updateMany({
+              where: {
+                email: user.email,
+                status: 'PENDING'
+              },
+              data: {
+                status: 'ACCEPTED'
+              }
+            })
+
+            console.log(`Automatically accepted ${pendingInvitations.length} project invitations for ${user.email}`)
+          }
+        } catch (error) {
+          console.error('Error processing invitations during signin:', error)
+          // Don't block signin if invitation processing fails
+        }
+      }
+      
+      return true
     }
   },
   pages: {

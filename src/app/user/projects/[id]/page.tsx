@@ -47,6 +47,7 @@ interface Phase {
 
 interface Resource {
   id: string
+  identifier?: string // e.g., "VM-1a", "VM-1b", "Storage-2a" - unique identifier within phase
   resourceType: string
   configuration: string // JSON string containing field values
   quantity: number
@@ -278,7 +279,7 @@ export default function UserProjectDetails() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-medium text-purple-700">
-                    Total Budget
+                   
                   </CardTitle>
                   <div className="p-2 bg-purple-500/10 rounded-lg">
                     <DollarSign className="h-5 w-5 text-purple-600" />
@@ -289,7 +290,7 @@ export default function UserProjectDetails() {
                 <div className="text-2xl font-bold text-purple-900">${totalBudget.toLocaleString()}</div>
                 <div className="flex items-center gap-1 mt-1">
                   <Activity className="h-3 w-3 text-purple-600" />
-                  <span className="text-xs text-purple-600">Allocated budget</span>
+                  <span className="text-xs text-purple-600"></span>
                 </div>
               </CardContent>
             </Card>
@@ -405,7 +406,14 @@ export default function UserProjectDetails() {
                                 <Card key={resource.id} className="border border-gray-200">
                                   <CardContent className="p-4">
                                     <div className="flex items-center justify-between mb-3">
-                                      <h6 className="font-medium text-gray-900">{resource.resourceType}</h6>
+                                      <div className="flex items-center gap-2">
+                                        <h6 className="font-medium text-gray-900">{resource.resourceType}</h6>
+                                        {resource.identifier && (
+                                          <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 border-gray-300">
+                                            {resource.identifier}
+                                          </Badge>
+                                        )}
+                                      </div>
                                       <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
                                         {resource.quantity}x
                                       </Badge>
@@ -416,7 +424,7 @@ export default function UserProjectDetails() {
                                       </div>
                                       <Separator className="my-2" />
                                       <div className="flex justify-between font-medium">
-                                        <span className="text-gray-600">Cost/unit:</span>
+                                        <span className="text-gray-600"></span>
                                         <span className="text-green-600">${resource.costPerUnit}</span>
                                       </div>
                                       <div className="flex justify-between font-medium">

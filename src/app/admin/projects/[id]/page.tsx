@@ -36,6 +36,7 @@ interface Project {
   endDate: string
   phases: Phase[]
   users: User[]
+  invitations?: ProjectInvitation[]
   createdAt: string
 }
 
@@ -43,6 +44,14 @@ interface User {
   id: string
   name: string
   email: string
+}
+
+interface ProjectInvitation {
+  id: string
+  email: string
+  status: 'PENDING' | 'ACCEPTED' | 'EXPIRED'
+  emailSent: boolean
+  createdAt: string
 }
 
 interface Phase {
@@ -77,6 +86,7 @@ interface ResourceField {
 
 interface Resource {
   id: string
+  identifier?: string // e.g., "VM-1a", "VM-1b", "Storage-2a" - unique identifier within phase
   resourceType: string // The type of resource (e.g., "Virtual Machine", "Database", etc.)
   resourceTemplateId?: string
   resourceTemplate?: ResourceTemplate
@@ -418,12 +428,17 @@ export default function ProjectDetailsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newPhase)
       })
+      
       if (response.ok) {
         fetchProject()
         setNewPhase({ name: '', duration: 1 })
+      } else {
+        const errorData = await response.json()
+        alert(errorData.error || 'Failed to add phase')
       }
     } catch (err) {
       console.error('Failed to add phase:', err)
+      alert('An error occurred while adding the phase')
     }
   }
 
@@ -859,7 +874,14 @@ export default function ProjectDetailsPage() {
                                   }`}>
                                     <CardContent className="p-4">
                                       <div className="flex items-center justify-between mb-3">
-                                        <h6 className="font-medium text-gray-900">{resource.resourceType}</h6>
+                                        <div className="flex items-center gap-2">
+                                          <h6 className="font-medium text-gray-900">{resource.resourceType}</h6>
+                                          {resource.identifier && (
+                                            <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 border-gray-300">
+                                              {resource.identifier}
+                                            </Badge>
+                                          )}
+                                        </div>
                                         <div className="flex items-center gap-2">
                                           <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
                                             {resource.quantity} total
@@ -1163,6 +1185,7 @@ export default function ProjectDetailsPage() {
                       />
                       <p className="text-sm text-gray-500">
                         Enter email addresses of users who should have access to this project, separated by commas.
+                        Registered users will be added immediately, while unregistered users will receive email invitations.
                         Leave empty to keep current user assignments.
                       </p>
                     </div>
@@ -1223,29 +1246,63 @@ export default function ProjectDetailsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  User Access ({project?.users.length || 0} assigned)
+                  User Access ({(project?.users.length || 0) + (project?.invitations?.filter(inv => inv.status === 'PENDING').length || 0)} total)
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {project?.users && project.users.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {project.users.map((user) => (
-                      <Badge key={user.id} variant="outline" className="flex items-center gap-2 px-3 py-2">
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback className="text-xs">
-                            {user.name?.charAt(0) || 'U'}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="text-sm">
-                          <div className="font-medium">{user.name}</div>
-                          <div className="text-gray-500 text-xs">{user.email}</div>
-                        </div>
-                      </Badge>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-500">No users assigned to this project</p>
-                )}
+                <div className="space-y-4">
+                  {/* Assigned Users */}
+                  {project?.users && project.users.length > 0 && (
+                    <div>
+                      <h6 className="font-medium mb-3 text-green-700">✅ Registered Users ({project.users.length})</h6>
+                      <div className="flex flex-wrap gap-2">
+                        {project.users.map((user) => (
+                          <Badge key={user.id} variant="outline" className="flex items-center gap-2 px-3 py-2 border-green-300 bg-green-50">
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="text-xs bg-green-100">
+                                {user.name?.charAt(0) || 'U'}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="text-sm">
+                              <div className="font-medium">{user.name}</div>
+                              <div className="text-gray-500 text-xs">{user.email}</div>
+                            </div>
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Pending Invitations */}
+                  {project?.invitations && project.invitations.filter(inv => inv.status === 'PENDING').length > 0 && (
+                    <div>
+                      <h6 className="font-medium mb-3 text-orange-700">📧 Pending Invitations ({project.invitations.filter(inv => inv.status === 'PENDING').length})</h6>
+                      <div className="flex flex-wrap gap-2">
+                        {project.invitations
+                          .filter(inv => inv.status === 'PENDING')
+                          .map((invitation) => (
+                            <Badge key={invitation.id} variant="outline" className="flex items-center gap-2 px-3 py-2 border-orange-300 bg-orange-50">
+                              <div className="h-6 w-6 rounded-full bg-orange-100 flex items-center justify-center">
+                                <span className="text-xs">📧</span>
+                              </div>
+                              <div className="text-sm">
+                                <div className="font-medium">{invitation.email}</div>
+                                <div className="text-gray-500 text-xs">
+                                  {invitation.emailSent ? 'Email sent' : 'Email pending'} • 
+                                  {new Date(invitation.createdAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                            </Badge>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {(!project?.users || project.users.length === 0) && 
+                   (!project?.invitations || project.invitations.filter(inv => inv.status === 'PENDING').length === 0) && (
+                    <p className="text-gray-500">No users assigned to this project</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
 

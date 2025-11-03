@@ -3,6 +3,54 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
+// Function to generate unique identifier for resources
+async function generateResourceIdentifier(phaseId: string, resourceType: string): Promise<string> {
+  // Get all resources of the same type in this phase
+  const existingResources = await prisma.resource.findMany({
+    where: {
+      phaseId,
+      resourceType
+    },
+    select: {
+      identifier: true
+    },
+    orderBy: {
+      createdAt: 'asc'
+    }
+  })
+
+  // Extract existing identifiers and find the next available one
+  const existingIdentifiers = existingResources
+    .map(r => r.identifier)
+    .filter(Boolean) as string[]
+
+  // Create a simplified resource type prefix (e.g., "Virtual Machine" -> "VM", "Storage" -> "Storage")
+  const typePrefix = resourceType
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase())
+    .join('')
+    .substring(0, 10) // Limit to 10 characters
+
+  let counter = 1
+  let suffix = 'a'
+  
+  while (true) {
+    const identifier = `${typePrefix}-${counter}${suffix}`
+    
+    if (!existingIdentifiers.includes(identifier)) {
+      return identifier
+    }
+    
+    // Increment suffix (a -> b -> c ... z -> aa -> ab ...)
+    if (suffix === 'z') {
+      counter++
+      suffix = 'a'
+    } else {
+      suffix = String.fromCharCode(suffix.charCodeAt(0) + 1)
+    }
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -56,8 +104,12 @@ export async function POST(
       )
     }
 
+    // Generate unique identifier for this resource
+    const identifier = await generateResourceIdentifier(id, resourceType)
+
     const resource = await prisma.resource.create({
       data: {
+        identifier,
         resourceType,
         resourceTemplateId: resourceTemplateId || null,
         configuration: configuration || '{}',

@@ -42,7 +42,7 @@ A full-stack web application built with Next.js 15, TypeScript, PostgreSQL, and 
 
 1. **Clone and setup the project**:
 ```bash
-cd Resource_Management
+cd bid-management
 npm install
 ```
 

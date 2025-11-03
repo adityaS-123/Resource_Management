@@ -75,12 +75,8 @@ export default function NewRequestPage() {
   const [selectedProject, setSelectedProject] = useState<string>('')
   const [selectedPhase, setSelectedPhase] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState<ResourceTemplate | null>(null)
-  const [selectedResource, setSelectedResource] = useState<Resource | null>(null)
-  const [requestType, setRequestType] = useState<'template' | 'custom'>('template')
-  const [resourceAvailability, setResourceAvailability] = useState<Map<string, any>>(new Map())
   const [formData, setFormData] = useState({
     resourceTemplateId: '',
-    resourceType: '', // For custom flexible resources
     requestedConfig: {} as Record<string, any>,
     requestedQty: 1,
     justification: ''
@@ -118,72 +114,25 @@ export default function NewRequestPage() {
     }
   }
 
-  const fetchResourceAvailability = async () => {
-    if (!selectedPhaseData?.resources) return
-    
-    const availabilityMap = new Map()
-    
-    for (const resource of selectedPhaseData.resources) {
-      try {
-        const response = await fetch('/api/resources/availability', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            phaseId: selectedPhase,
-            resourceTemplateId: resource.resourceTemplateId,
-            resourceType: resource.resourceType
-          })
-        })
-        
-        if (response.ok) {
-          const availabilityData = await response.json()
-          availabilityMap.set(resource.id, availabilityData)
-        }
-      } catch (err) {
-        console.error('Error fetching availability for resource:', resource.id, err)
-      }
-    }
-    
-    setResourceAvailability(availabilityMap)
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
 
     try {
-      // Validate availability before submitting
-      if (requestType === 'custom' && selectedResource) {
-        const availability = resourceAvailability.get(selectedResource.id)
-        if (availability && formData.requestedQty > availability.availableQuantity) {
-          setError(`Cannot request ${formData.requestedQty} units. Only ${availability.availableQuantity} units are available.`)
-          setLoading(false)
-          return
-        }
+      // Validate required fields
+      if (!formData.resourceTemplateId) {
+        setError('Please select a resource template')
+        setLoading(false)
+        return
       }
 
       const requestBody = {
         phaseId: selectedPhase,
+        resourceTemplateId: formData.resourceTemplateId,
+        requestedConfig: formData.requestedConfig,
         requestedQty: formData.requestedQty,
         justification: formData.justification
-      }
-
-      // Add either resourceTemplateId for template-based requests or resourceType for custom requests
-      if (requestType === 'template' && formData.resourceTemplateId) {
-        Object.assign(requestBody, {
-          resourceTemplateId: formData.resourceTemplateId,
-          requestedConfig: formData.requestedConfig
-        })
-      } else if (requestType === 'custom' && formData.resourceType) {
-        Object.assign(requestBody, {
-          resourceType: formData.resourceType,
-          requestedConfig: formData.requestedConfig
-        })
-      } else {
-        setError('Please select a resource type')
-        setLoading(false)
-        return
       }
 
       const response = await fetch('/api/requests', {
@@ -213,39 +162,11 @@ export default function NewRequestPage() {
   const handleTemplateChange = (templateId: string) => {
     const template = resourceTemplates.find(t => t.id === templateId)
     setSelectedTemplate(template || null)
-    setSelectedResource(null)
-    setRequestType('template')
     setFormData(prev => ({
       ...prev,
       resourceTemplateId: templateId,
-      resourceType: '',
       requestedConfig: {}
     }))
-  }
-
-  const handleCustomResourceChange = (resourceId: string) => {
-    const selectedPhaseData = projects.find(p => p.id === selectedProject)?.phases.find(ph => ph.id === selectedPhase)
-    const resource = selectedPhaseData?.resources.find(r => r.id === resourceId)
-    setSelectedResource(resource || null)
-    setSelectedTemplate(null)
-    setRequestType('custom')
-    
-    if (resource) {
-      // Parse the existing configuration to pre-populate the form
-      let existingConfig = {}
-      try {
-        existingConfig = JSON.parse(resource.configuration)
-      } catch (e) {
-        console.error('Error parsing resource configuration:', e)
-      }
-      
-      setFormData(prev => ({
-        ...prev,
-        resourceTemplateId: '',
-        resourceType: resource.resourceType,
-        requestedConfig: existingConfig
-      }))
-    }
   }
 
   const handleConfigChange = (fieldName: string, value: any) => {
@@ -256,40 +177,6 @@ export default function NewRequestPage() {
         [fieldName]: value
       }
     }))
-  }
-
-  const renderCustomResourceFields = (resource: Resource) => {
-    try {
-      const config = JSON.parse(resource.configuration)
-      return Object.entries(config).map(([key, value]) => (
-        <div key={key} className="space-y-2">
-          <Label htmlFor={key}>
-            {key}
-            <span className="text-gray-500 ml-2">(Current: {String(value)})</span>
-          </Label>
-          <Input
-            id={key}
-            type={typeof value === 'number' ? 'number' : 'text'}
-            value={formData.requestedConfig[key] || value}
-            onChange={(e) => handleConfigChange(key, 
-              typeof value === 'number' ? 
-                (parseFloat(e.target.value) || 0) : 
-                e.target.value
-            )}
-            placeholder={`Enter ${key}`}
-          />
-          <p className="text-xs text-gray-500">
-            You can modify this value or keep the current configuration
-          </p>
-        </div>
-      ))
-    } catch (e) {
-      return (
-        <div className="text-sm text-gray-500">
-          Unable to parse resource configuration
-        </div>
-      )
-    }
   }
 
   const renderField = (field: ResourceField) => {
@@ -337,9 +224,9 @@ export default function NewRequestPage() {
                 <SelectValue placeholder={`Select ${field.label}`} />
               </SelectTrigger>
               <SelectContent>
-                {options.map((option: any) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
+                {options.map((option: string, index: number) => (
+                  <SelectItem key={`${field.name}-${index}`} value={option}>
+                    {option}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -402,13 +289,6 @@ export default function NewRequestPage() {
   const selectedProjectData = projects.find(p => p.id === selectedProject)
   const selectedPhaseData = selectedProjectData?.phases.find(ph => ph.id === selectedPhase)
 
-  // Fetch resource availability when phase data changes
-  useEffect(() => {
-    if (selectedPhaseData?.resources) {
-      fetchResourceAvailability()
-    }
-  }, [selectedPhaseData])
-
   if (success) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -446,7 +326,7 @@ export default function NewRequestPage() {
           </Button>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">New Resource Request</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
-            Request resources for your project phases using flexible resource templates
+            Request resources for your project phases using predefined resource templates
           </p>
         </div>
 
@@ -506,9 +386,6 @@ export default function NewRequestPage() {
                       <SelectItem key={phase.id} value={phase.id}>
                         <div>
                           <div className="font-medium">{phase.name}</div>
-                          <div className="text-sm text-gray-500">
-                            Budget: ${phase.allocatedCost.toLocaleString()}
-                          </div>
                         </div>
                       </SelectItem>
                     ))}
@@ -518,212 +395,76 @@ export default function NewRequestPage() {
             </Card>
           )}
 
-          {/* Step 3: Select Resource Type */}
+          {/* Step 3: Select Resource Template */}
           {selectedPhase && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Server className="h-5 w-5" />
-                  Select Resource Type
+                  Select Resource Template
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Resource Type Selection Tabs */}
-                <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
-                  <button
-                    type="button"
-                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                      requestType === 'template' 
-                        ? 'bg-white shadow-sm text-blue-600' 
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                    onClick={() => {
-                      setRequestType('template')
-                      setSelectedResource(null)
-                      setFormData(prev => ({ ...prev, resourceType: '', requestedConfig: {} }))
-                    }}
-                  >
-                    Template Resources
-                  </button>
-                  <button
-                    type="button"
-                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                      requestType === 'custom' 
-                        ? 'bg-white shadow-sm text-blue-600' 
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                    onClick={() => {
-                      setRequestType('custom')
-                      setSelectedTemplate(null)
-                      setFormData(prev => ({ ...prev, resourceTemplateId: '', requestedConfig: {} }))
-                    }}
-                  >
-                    Project Resources
-                  </button>
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Choose from Available Templates</Label>
+                  <Select value={formData.resourceTemplateId} onValueChange={handleTemplateChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a resource template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {resourceTemplates.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          <div>
+                            <div className="font-medium">{template.name}</div>
+                            {template.description && (
+                              <div className="text-sm text-gray-500">{template.description}</div>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {resourceTemplates.length === 0 && (
+                    <p className="text-sm text-gray-500 mt-2">No resource templates available</p>
+                  )}
                 </div>
-
-                {/* Template Resources */}
-                {requestType === 'template' && (
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">Choose from Available Templates</Label>
-                    <Select value={formData.resourceTemplateId} onValueChange={handleTemplateChange}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a resource template" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {resourceTemplates.map((template) => (
-                          <SelectItem key={template.id} value={template.id}>
-                            <div>
-                              <div className="font-medium">{template.name}</div>
-                              {template.description && (
-                                <div className="text-sm text-gray-500">{template.description}</div>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {resourceTemplates.length === 0 && (
-                      <p className="text-sm text-gray-500 mt-2">No resource templates available</p>
-                    )}
-                  </div>
-                )}
-
-                {/* Custom Project Resources */}
-                {requestType === 'custom' && (
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">Choose from Project Resources</Label>
-                    {selectedPhaseData?.resources && selectedPhaseData.resources.length > 0 ? (
-                      <Select value={selectedResource?.id || ''} onValueChange={handleCustomResourceChange}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Choose a project resource" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {selectedPhaseData.resources.map((resource) => {
-                            const availability = resourceAvailability.get(resource.id)
-                            const isAvailable = availability && availability.availableQuantity > 0
-                            const isFullyAllocated = availability && availability.availableQuantity === 0
-                            
-                            return (
-                              <SelectItem 
-                                key={resource.id} 
-                                value={resource.id}
-                                disabled={isFullyAllocated}
-                              >
-                                <div className={isFullyAllocated ? 'opacity-50' : ''}>
-                                  <div className="font-medium flex items-center gap-2">
-                                    {resource.resourceType}
-                                    {isFullyAllocated && (
-                                      <span className="text-xs text-red-600 bg-red-100 px-1 rounded">
-                                        Fully Allocated
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="text-sm text-gray-500">
-                                    {availability ? (
-                                      <>
-                                        Available: {availability.availableQuantity}/{availability.totalQuantity} units • ${resource.costPerUnit}/unit
-                                        {availability.allocatedQuantity > 0 && (
-                                          <span className="text-orange-600 ml-2">
-                                            ({availability.allocatedQuantity} allocated)
-                                          </span>
-                                        )}
-                                      </>
-                                    ) : (
-                                      `Total: ${resource.quantity} units • $${resource.costPerUnit}/unit`
-                                    )}
-                                  </div>
-                                </div>
-                              </SelectItem>
-                            )
-                          })}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
-                        <Server className="mx-auto h-10 w-10 mb-3 text-gray-300" />
-                        <p className="font-medium mb-1">No Resources Available</p>
-                        <p className="text-sm">This phase doesn&apos;t have any custom resources configured yet.</p>
-                      </div>
-                    )}
-                  </div>
-                )}
               </CardContent>
             </Card>
           )}
 
           {/* Step 4: Configure Resource */}
-          {(selectedTemplate || selectedResource) && (
+          {selectedTemplate && (
             <Card>
               <CardHeader>
                 <CardTitle>
-                  Configure {selectedTemplate?.name || selectedResource?.resourceType}
+                  Configure {selectedTemplate.name}
                 </CardTitle>
-                {selectedResource && (
-                  <p className="text-sm text-gray-600">
-                    Requesting from project resource • ${selectedResource.costPerUnit}/unit
-                  </p>
-                )}
               </CardHeader>
               <CardContent className="space-y-4">
-                {selectedTemplate && selectedTemplate.fields
+                {selectedTemplate.fields
                   .sort((a, b) => a.sortOrder - b.sortOrder)
                   .map(field => renderField(field))}
-                
-                {selectedResource && renderCustomResourceFields(selectedResource)}
                 
                 <div className="space-y-2">
                   <Label htmlFor="requestedQty">
                     Quantity <span className="text-red-500">*</span>
                   </Label>
-                  {(() => {
-                    const availability = selectedResource ? resourceAvailability.get(selectedResource.id) : null
-                    const maxAvailable = availability ? availability.availableQuantity : selectedResource?.quantity || 999
-                    
-                    return (
-                      <>
-                        <Input
-                          id="requestedQty"
-                          type="number"
-                          min="1"
-                          max={maxAvailable}
-                          value={formData.requestedQty}
-                          onChange={(e) => setFormData(prev => ({
-                            ...prev,
-                            requestedQty: parseInt(e.target.value) || 1
-                          }))}
-                          required
-                        />
-                        {selectedResource && availability && (
-                          <div className="text-xs space-y-1">
-                            <p className={availability.availableQuantity > 0 ? 'text-green-600' : 'text-red-600'}>
-                              Available: {availability.availableQuantity}/{availability.totalQuantity} units
-                            </p>
-                            {availability.allocatedQuantity > 0 && (
-                              <p className="text-orange-600">
-                                {availability.allocatedQuantity} units already allocated to other users
-                              </p>
-                            )}
-                            {availability.availableQuantity === 0 && (
-                              <p className="text-red-600 font-medium">
-                                ⚠️ This resource is fully allocated and cannot be requested
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        {selectedResource && !availability && (
-                          <p className="text-xs text-gray-500">
-                            Total available: {selectedResource.quantity} units
-                          </p>
-                        )}
-                      </>
-                    )
-                  })()}
+                  <Input
+                    id="requestedQty"
+                    type="number"
+                    min="1"
+                    value={formData.requestedQty}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      requestedQty: parseInt(e.target.value) || 1
+                    }))}
+                    required
+                  />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="justification">
-                    Justification {selectedResource ? '' : '(Recommended)'}
+                    Justification (Recommended)
                   </Label>
                   <Textarea
                     id="justification"
@@ -735,26 +476,12 @@ export default function NewRequestPage() {
                     }))}
                   />
                 </div>
-
-                {selectedResource && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h4 className="font-medium text-blue-900 mb-2">Request Summary</h4>
-                    <div className="text-sm text-blue-800 space-y-1">
-                      <div>Resource Type: {selectedResource.resourceType}</div>
-                      <div>Quantity: {formData.requestedQty} units</div>
-                      <div>Cost per unit: ${selectedResource.costPerUnit}</div>
-                      <div className="font-medium">
-                        Total estimated cost: ${(selectedResource.costPerUnit * formData.requestedQty).toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
           )}
 
           {/* Submit Button */}
-          {(selectedTemplate || selectedResource) && (
+          {selectedTemplate && (
             <div className="flex justify-end">
               <Button 
                 type="submit" 
