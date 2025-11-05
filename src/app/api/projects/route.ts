@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { sendEmail } from '@/lib/email'
+import { sendProjectInvitationEmail } from '@/lib/email'
 
 export async function GET() {
   try {
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
       
       for (const email of unregisteredEmails) {
         try {
-          await sendEmail(email, {
+          await sendProjectInvitationEmail(email, {
             projectName: project.name,
             client: project.client,
             startDate: project.startDate.toISOString(),
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
               name: phase.name,
               duration: phase.duration,
               resources: phase.resources.map(resource => ({
-                identifier: resource.identifier,
+                identifier: resource.identifier || undefined,
                 resourceType: resource.resourceType,
                 quantity: resource.quantity,
                 configuration: resource.configuration

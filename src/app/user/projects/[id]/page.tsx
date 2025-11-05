@@ -12,7 +12,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import Navigation from '@/components/navigation'
 import { 
   CalendarDays, 
-  DollarSign, 
   Users, 
   Activity, 
   Clock, 
@@ -51,6 +50,7 @@ interface Resource {
   resourceType: string
   configuration: string // JSON string containing field values
   quantity: number
+  consumedQuantity: number // Amount already allocated/consumed
   costPerUnit: number
 }
 
@@ -187,7 +187,6 @@ export default function UserProjectDetails() {
     )
   }
 
-  const totalBudget = project.phases?.reduce((sum, phase) => sum + (phase.allocatedCost || 0), 0) || 0
   const totalResources = project.phases?.reduce((total, phase) => 
     total + (phase.resources?.reduce((phaseTotal, resource) => phaseTotal + (resource.quantity || 0), 0) || 0), 0
   ) || 0
@@ -222,17 +221,23 @@ export default function UserProjectDetails() {
               </div>
             </div>
             <div className="flex gap-3">
-              <Link href="/user/requests/new">
+              <Link href={`/user/projects/${params.id}/request`}>
                 <Button className="flex items-center gap-2">
                   <Plus className="h-4 w-4" />
-                  Request Resources
+                  Request Project Resources
+                </Button>
+              </Link>
+              <Link href="/user/requests/new">
+                <Button variant="outline" className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Request Template Resources
                 </Button>
               </Link>
             </div>
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-50 to-blue-100">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
@@ -271,26 +276,6 @@ export default function UserProjectDetails() {
                 <div className="flex items-center gap-1 mt-1">
                   <Server className="h-3 w-3 text-green-600" />
                   <span className="text-xs text-green-600">Allocated resources</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-50 to-purple-100">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium text-purple-700">
-                   
-                  </CardTitle>
-                  <div className="p-2 bg-purple-500/10 rounded-lg">
-                    <DollarSign className="h-5 w-5 text-purple-600" />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-purple-900">${totalBudget.toLocaleString()}</div>
-                <div className="flex items-center gap-1 mt-1">
-                  <Activity className="h-3 w-3 text-purple-600" />
-                  <span className="text-xs text-purple-600"></span>
                 </div>
               </CardContent>
             </Card>
@@ -380,10 +365,6 @@ export default function UserProjectDetails() {
                               <Clock className="h-3 w-3 mr-1" />
                               {phase.duration} months
                             </Badge>
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
-                              <DollarSign className="h-3 w-3 mr-1" />
-                              ${phase.allocatedCost.toLocaleString()}
-                            </Badge>
                           </div>
                         </div>
                       </CardHeader>
@@ -402,39 +383,48 @@ export default function UserProjectDetails() {
                             </div>
                           ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {phase.resources.map((resource) => (
-                                <Card key={resource.id} className="border border-gray-200">
-                                  <CardContent className="p-4">
-                                    <div className="flex items-center justify-between mb-3">
-                                      <div className="flex items-center gap-2">
-                                        <h6 className="font-medium text-gray-900">{resource.resourceType}</h6>
-                                        {resource.identifier && (
-                                          <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 border-gray-300">
-                                            {resource.identifier}
+                              {phase.resources
+                                .filter(resource => {
+                                  const availableQty = resource.quantity - (resource.consumedQuantity || 0)
+                                  return availableQty > 0 // Only show available resources
+                                })
+                                .map((resource) => {
+                                  const availableQty = resource.quantity - (resource.consumedQuantity || 0)
+                                  return (
+                                    <Card key={resource.id} className="border border-gray-200">
+                                      <CardContent className="p-4">
+                                        <div className="flex items-center justify-between mb-3">
+                                          <div className="flex items-center gap-2">
+                                            <h6 className="font-medium text-gray-900">{resource.resourceType}</h6>
+                                            {resource.identifier && (
+                                              <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 border-gray-300">
+                                                {resource.identifier}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                                            {availableQty} available
                                           </Badge>
-                                        )}
-                                      </div>
-                                      <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
-                                        {resource.quantity}x
-                                      </Badge>
-                                    </div>
-                                    <div className="space-y-2 text-sm">
-                                      <div className="space-y-1">
-                                        {renderResourceConfig(resource.configuration)}
-                                      </div>
-                                      <Separator className="my-2" />
-                                      <div className="flex justify-between font-medium">
-                                        <span className="text-gray-600"></span>
-                                        <span className="text-green-600">${resource.costPerUnit}</span>
-                                      </div>
-                                      <div className="flex justify-between font-medium">
-                                        <span className="text-gray-600">Total:</span>
-                                        <span className="text-gray-900">${(resource.quantity * resource.costPerUnit).toLocaleString()}</span>
-                                      </div>
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                              ))}
+                                        </div>
+                                        <div className="space-y-2 text-sm">
+                                          <div className="space-y-1">
+                                            {renderResourceConfig(resource.configuration)}
+                                          </div>
+                                        </div>
+                                      </CardContent>
+                                    </Card>
+                                  )
+                                })}
+                              {phase.resources.every(resource => {
+                                const availableQty = resource.quantity - (resource.consumedQuantity || 0)
+                                return availableQty <= 0
+                              }) && phase.resources.length > 0 && (
+                                <div className="col-span-full text-center py-8 text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                                  <Database className="mx-auto h-10 w-10 mb-3 text-gray-300" />
+                                  <p className="font-medium mb-1">All Resources Fully Allocated</p>
+                                  <p className="text-sm">All resources in this phase have been fully allocated.</p>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -450,10 +440,10 @@ export default function UserProjectDetails() {
                               <Users className="mx-auto h-10 w-10 mb-3 text-gray-300" />
                               <p className="font-medium mb-1">No Resource Requests</p>
                               <p className="text-sm mb-4">You haven&apos;t made any resource requests for this phase yet.</p>
-                              <Link href="/user/requests/new">
+                              <Link href={`/user/projects/${params.id}/request`}>
                                 <Button size="sm" className="flex items-center gap-2">
                                   <Plus className="h-4 w-4" />
-                                  Request Resources
+                                  Request Phase Resources
                                 </Button>
                               </Link>
                             </div>

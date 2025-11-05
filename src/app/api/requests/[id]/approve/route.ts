@@ -48,6 +48,16 @@ export async function POST(
       return NextResponse.json({ error: 'Request not found' }, { status: 404 })
     }
 
+    // Check if this is a project-specific resource request
+    const isProjectResource = !!existingRequest.resourceId
+    
+    // Prevent manual approval/rejection of auto-approved project resources
+    if (isProjectResource && existingRequest.status === 'APPROVED') {
+      return NextResponse.json({ 
+        error: 'Project-specific resource requests are automatically approved and cannot be manually modified' 
+      }, { status: 400 })
+    }
+
     // If approving, check resource availability and update consumption
     if (status === 'APPROVED') {
       // Find the resource that this request is for
@@ -97,29 +107,60 @@ export async function POST(
       }
     }
 
-    const resourceRequest = await prisma.resourceRequest.update({
-      where: { id },
-      data: {
-        status: status as 'APPROVED' | 'REJECTED',
-        approvedById: session.user.id,
-        approvedAt: new Date(),
-        rejectionReason: status === 'REJECTED' ? rejectionReason : null
-      },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true }
+    // Use a transaction to update both the request and resource consumption
+    const resourceRequest = await prisma.$transaction(async (tx) => {
+      // Update the request status
+      const updatedRequest = await tx.resourceRequest.update({
+        where: { id },
+        data: {
+          status: status as 'APPROVED' | 'REJECTED',
+          approvedById: session.user.id,
+          approvedAt: new Date(),
+          rejectionReason: status === 'REJECTED' ? rejectionReason : null
         },
-        phase: {
-          include: {
-            project: {
-              select: { id: true, name: true, client: true }
+        include: {
+          user: {
+            select: { id: true, name: true, email: true }
+          },
+          phase: {
+            include: {
+              project: {
+                select: { id: true, name: true, client: true }
+              }
             }
+          },
+          approvedBy: {
+            select: { id: true, name: true, email: true }
           }
-        },
-        approvedBy: {
-          select: { id: true, name: true, email: true }
+        }
+      })
+
+      // Update resource consumption based on the status change
+      if (existingRequest.resourceId) {
+        if (status === 'APPROVED' && existingRequest.status !== 'APPROVED') {
+          // Approving a request - increment consumed quantity
+          await tx.resource.update({
+            where: { id: existingRequest.resourceId },
+            data: {
+              consumedQuantity: {
+                increment: existingRequest.requestedQty
+              }
+            }
+          })
+        } else if (status === 'REJECTED' && existingRequest.status === 'APPROVED') {
+          // Rejecting a previously approved request - decrement consumed quantity
+          await tx.resource.update({
+            where: { id: existingRequest.resourceId },
+            data: {
+              consumedQuantity: {
+                decrement: existingRequest.requestedQty
+              }
+            }
+          })
         }
       }
+
+      return updatedRequest
     })
 
     return NextResponse.json(resourceRequest)

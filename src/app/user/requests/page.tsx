@@ -18,6 +18,7 @@ import Navigation from '@/components/navigation'
 interface ResourceRequest {
   id: string
   resourceTemplateId?: string
+  resourceId?: string
   resourceType?: string
   resourceTemplate?: {
     id: string
@@ -38,6 +39,11 @@ interface ResourceRequest {
       name: string
       client: string
     }
+  }
+  user?: {
+    id: string
+    name: string
+    email: string
   }
   approvedBy: {
     id: string
@@ -124,17 +130,27 @@ export default function UserRequestsPage() {
     fetchRequests()
   }, [])
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (request: ResourceRequest) => {
     const colors = {
       PENDING: 'bg-yellow-100 text-yellow-800',
       APPROVED: 'bg-green-100 text-green-800',
       REJECTED: 'bg-red-100 text-red-800'
     }
 
+    // Auto-approved if it's a project resource (has resourceId) and is approved
+    const isAutoApproved = request.status === 'APPROVED' && !!request.resourceId
+
     return (
-      <Badge className={colors[status as keyof typeof colors]}>
-        {status}
-      </Badge>
+      <div className="flex flex-col gap-1">
+        <Badge className={colors[request.status as keyof typeof colors]}>
+          {request.status}
+        </Badge>
+        {isAutoApproved && (
+          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+            Auto-approved
+          </Badge>
+        )}
+      </div>
     )
   }
 
@@ -230,7 +246,7 @@ export default function UserRequestsPage() {
                             <div className="font-medium">Qty: {request.requestedQty}</div>
                           </div>
                         </TableCell>
-                        <TableCell>{getStatusBadge(request.status)}</TableCell>
+                        <TableCell>{getStatusBadge(request)}</TableCell>
                         <TableCell>
                           {new Date(request.createdAt).toLocaleDateString()}
                         </TableCell>

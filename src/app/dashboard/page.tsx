@@ -290,7 +290,6 @@ export default function UserDashboard() {
                     const totalResources = project.phases.reduce((total, phase) => 
                       total + phase.resources.reduce((phaseTotal, resource) => phaseTotal + resource.quantity, 0), 0
                     )
-                    const totalCost = project.phases.reduce((total, phase) => total + phase.allocatedCost, 0)
                     const daysRemaining = Math.ceil((new Date(project.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
                     const progress = Math.max(0, Math.min(100, 
                       ((new Date().getTime() - new Date(project.startDate).getTime()) / 
@@ -346,7 +345,7 @@ export default function UserDashboard() {
                           <Separator className="my-4" />
 
                           {/* Project Stats */}
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                               <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{project.phases.length}</div>
                               <div className="text-xs text-blue-600 dark:text-blue-400">Phases</div>
@@ -354,10 +353,6 @@ export default function UserDashboard() {
                             <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
                               <div className="text-lg font-bold text-green-600 dark:text-green-400">{totalResources}</div>
                               <div className="text-xs text-green-600 dark:text-green-400">Resources</div>
-                            </div>
-                            <div className="text-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                              <div className="text-lg font-bold text-purple-600 dark:text-purple-400">${totalCost.toLocaleString()}</div>
-                              <div className="text-xs text-purple-600 dark:text-purple-400"></div>
                             </div>
                           </div>
 

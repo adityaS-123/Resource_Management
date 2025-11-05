@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import Navigation from '@/components/navigation'
 import { 
   FolderOpen, 
@@ -18,7 +19,8 @@ import {
   Send,
   AlertCircle,
   CheckCircle,
-  Plus
+  Plus,
+  Database
 } from 'lucide-react'
 
 interface Project {
@@ -38,9 +40,11 @@ interface Phase {
 
 interface Resource {
   id: string
+  identifier?: string // e.g., "VM-1a", "VM-1b", "Storage-2a"
   resourceType: string // The flexible resource type (e.g., "Virtual Machine", "Database", etc.)
   configuration: string // JSON string containing field values
   quantity: number
+  consumedQuantity?: number // How much has been consumed/allocated
   costPerUnit: number
   resourceTemplateId?: string // Optional - for backward compatibility
   resourceTemplate?: ResourceTemplate
@@ -75,8 +79,11 @@ export default function NewRequestPage() {
   const [selectedProject, setSelectedProject] = useState<string>('')
   const [selectedPhase, setSelectedPhase] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState<ResourceTemplate | null>(null)
+  const [selectedProjectResource, setSelectedProjectResource] = useState<Resource | null>(null)
+  const [requestMode, setRequestMode] = useState<'template' | 'project'>('template')
   const [formData, setFormData] = useState({
     resourceTemplateId: '',
+    resourceId: '',
     requestedConfig: {} as Record<string, any>,
     requestedQty: 1,
     justification: ''
@@ -84,6 +91,7 @@ export default function NewRequestPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [autoApproved, setAutoApproved] = useState(false)
 
   useEffect(() => {
     fetchProjects()
@@ -120,19 +128,32 @@ export default function NewRequestPage() {
     setError('')
 
     try {
-      // Validate required fields
-      if (!formData.resourceTemplateId) {
+      // Validate required fields based on request mode
+      if (requestMode === 'template' && !formData.resourceTemplateId) {
         setError('Please select a resource template')
         setLoading(false)
         return
       }
 
-      const requestBody = {
+      if (requestMode === 'project' && !formData.resourceId) {
+        setError('Please select a project resource')
+        setLoading(false)
+        return
+      }
+
+      const requestBody: any = {
         phaseId: selectedPhase,
-        resourceTemplateId: formData.resourceTemplateId,
         requestedConfig: formData.requestedConfig,
         requestedQty: formData.requestedQty,
         justification: formData.justification
+      }
+
+      // Add appropriate fields based on request mode
+      if (requestMode === 'template') {
+        requestBody.resourceTemplateId = formData.resourceTemplateId
+      } else {
+        requestBody.resourceId = formData.resourceId
+        requestBody.resourceType = selectedProjectResource?.resourceType
       }
 
       const response = await fetch('/api/requests', {
@@ -144,7 +165,12 @@ export default function NewRequestPage() {
       })
 
       if (response.ok) {
+        const responseData = await response.json()
+        const isAutoApproved = responseData.status === 'APPROVED'
+        
         setSuccess(true)
+        setAutoApproved(isAutoApproved)
+        
         setTimeout(() => {
           router.push('/user/requests')
         }, 2000)
@@ -162,11 +188,78 @@ export default function NewRequestPage() {
   const handleTemplateChange = (templateId: string) => {
     const template = resourceTemplates.find(t => t.id === templateId)
     setSelectedTemplate(template || null)
+    
+    // Auto-populate with default values for better admin visibility
+    const defaultConfig: Record<string, any> = {}
+    if (template && template.fields) {
+      template.fields.forEach(field => {
+        if (field.defaultValue !== null && field.defaultValue !== undefined && field.defaultValue !== '') {
+          // Parse the default value based on field type
+          let value: any = field.defaultValue
+          if (field.fieldType === 'NUMBER') {
+            value = parseInt(field.defaultValue) || 0
+          } else if (field.fieldType === 'BOOLEAN') {
+            value = field.defaultValue.toLowerCase() === 'true'
+          }
+          defaultConfig[field.name] = value
+        }
+      })
+    }
+    
     setFormData(prev => ({
       ...prev,
       resourceTemplateId: templateId,
-      requestedConfig: {}
+      resourceId: '',
+      requestedConfig: defaultConfig
     }))
+  }
+
+  const handleProjectResourceChange = (resourceId: string) => {
+    const selectedProjectData = projects.find(p => p.id === selectedProject)
+    const selectedPhaseData = selectedProjectData?.phases.find(ph => ph.id === selectedPhase)
+    const resource = selectedPhaseData?.resources.find(r => r.id === resourceId)
+    
+    if (resource) {
+      setSelectedProjectResource(resource)
+      // Parse the existing configuration from the resource
+      try {
+        const config = JSON.parse(resource.configuration)
+        setFormData(prev => ({
+          ...prev,
+          resourceId: resourceId,
+          resourceTemplateId: '',
+          requestedConfig: config
+        }))
+      } catch {
+        setFormData(prev => ({
+          ...prev,
+          resourceId: resourceId,
+          resourceTemplateId: '',
+          requestedConfig: {}
+        }))
+      }
+    }
+  }
+
+  const renderResourceConfig = (configuration: string) => {
+    try {
+      if (!configuration || configuration.trim() === '') {
+        return <div className="text-xs text-gray-500">No configuration</div>
+      }
+      const config = JSON.parse(configuration)
+      const entries = Object.entries(config)
+      if (entries.length === 0) {
+        return <div className="text-xs text-gray-500">No configuration</div>
+      }
+      return entries.map(([key, value]) => (
+        <div key={key} className="flex justify-between text-sm">
+          <span className="text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1')}:</span>
+          <span className="font-medium">{String(value)}</span>
+        </div>
+      ))
+    } catch {
+      return <div className="text-xs text-gray-500">Invalid configuration</div>
+    }
   }
 
   const handleConfigChange = (fieldName: string, value: any) => {
@@ -297,9 +390,14 @@ export default function NewRequestPage() {
           <Card className="border-green-200 bg-green-50">
             <CardContent className="pt-6 text-center">
               <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-green-900 mb-2">Request Submitted Successfully!</h2>
+              <h2 className="text-2xl font-bold text-green-900 mb-2">
+                {autoApproved ? 'Resource Allocated Successfully!' : 'Request Submitted Successfully!'}
+              </h2>
               <p className="text-green-700 mb-4">
-                Your resource request has been submitted and is now pending approval.
+                {autoApproved 
+                  ? 'Your project resource has been automatically allocated and is ready to use.'
+                  : 'Your resource request has been submitted and is now pending admin approval.'
+                }
               </p>
               <p className="text-sm text-green-600">
                 Redirecting to your requests...
@@ -326,7 +424,7 @@ export default function NewRequestPage() {
           </Button>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">New Resource Request</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
-            Request resources for your project phases using predefined resource templates
+            Request resources using predefined templates or from project-specific configured resources
           </p>
         </div>
 
@@ -395,55 +493,202 @@ export default function NewRequestPage() {
             </Card>
           )}
 
-          {/* Step 3: Select Resource Template */}
+          {/* Step 3: Select Resource Type and Source */}
           {selectedPhase && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Server className="h-5 w-5" />
-                  Select Resource Template
+                  Select Resource
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Choose from Available Templates</Label>
-                  <Select value={formData.resourceTemplateId} onValueChange={handleTemplateChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a resource template" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {resourceTemplates.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          <div>
-                            <div className="font-medium">{template.name}</div>
-                            {template.description && (
-                              <div className="text-sm text-gray-500">{template.description}</div>
-                            )}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {resourceTemplates.length === 0 && (
-                    <p className="text-sm text-gray-500 mt-2">No resource templates available</p>
-                  )}
+              <CardContent className="space-y-6">
+                {/* Resource Mode Selection */}
+                <div className="space-y-4">
+                  <Label className="text-sm font-medium">Choose Resource Source</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card 
+                      className={`cursor-pointer transition-all border-2 ${
+                        requestMode === 'project' 
+                          ? 'border-blue-500 bg-blue-50' 
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      onClick={() => setRequestMode('project')}
+                    >
+                      <CardContent className="p-4 text-center">
+                        <div className="flex items-center justify-center mb-2">
+                          <Database className="h-6 w-6 text-green-600" />
+                        </div>
+                        <h3 className="font-medium text-gray-900">Project Resource</h3>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Request from configured project resources
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card 
+                      className={`cursor-pointer transition-all border-2 ${
+                        requestMode === 'template' 
+                          ? 'border-blue-500 bg-blue-50' 
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      onClick={() => setRequestMode('template')}
+                    >
+                      <CardContent className="p-4 text-center">
+                        <div className="flex items-center justify-center mb-2">
+                          <Server className="h-6 w-6 text-blue-600" />
+                        </div>
+                        <h3 className="font-medium text-gray-900">Request Additional Resource</h3>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Request any available resource template (requires admin approval)
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
+
+                {/* Template Selection */}
+                {requestMode === 'template' && (
+                  <div className="space-y-4">
+                    <Label className="text-sm font-medium">Choose from Available Resource Templates</Label>
+                    <p className="text-sm text-gray-600 mb-3">
+                      Select any available resource template to request additional resources outside your project allocation. These requests require admin approval.
+                    </p>
+                    <Select value={formData.resourceTemplateId} onValueChange={handleTemplateChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a resource template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {resourceTemplates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            <div>
+                              <div className="font-medium">{template.name}</div>
+                              {template.description && (
+                                <div className="text-sm text-gray-500">{template.description}</div>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {resourceTemplates.length === 0 && (
+                      <p className="text-sm text-gray-500 mt-2">No resource templates available</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Project Resource Selection */}
+                {requestMode === 'project' && selectedPhaseData && (
+                  <div className="space-y-4">
+                    <Label className="text-sm font-medium">Choose from Project Resources</Label>
+                    {selectedPhaseData.resources.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                        <Database className="mx-auto h-10 w-10 mb-3 text-gray-300" />
+                        <p className="font-medium mb-1">No Configured Resources</p>
+                        <p className="text-sm">No resources have been configured for this phase yet.</p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3">
+                        {selectedPhaseData.resources
+                          .filter(resource => {
+                            const availableQty = resource.quantity - (resource.consumedQuantity || 0)
+                            return availableQty > 0 // Only show resources that have availability
+                          })
+                          .map((resource) => {
+                            const availableQty = resource.quantity - (resource.consumedQuantity || 0)
+                            const isSelected = formData.resourceId === resource.id
+                            
+                            return (
+                              <Card 
+                                key={resource.id} 
+                                className={`cursor-pointer transition-all border-2 ${
+                                  isSelected 
+                                    ? 'border-blue-500 bg-blue-50' 
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                                onClick={() => handleProjectResourceChange(resource.id)}
+                              >
+                                <CardContent className="p-4">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                      <h6 className="font-medium text-gray-900">{resource.resourceType}</h6>
+                                      {resource.identifier && (
+                                        <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700">
+                                          {resource.identifier}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                                        {availableQty} available
+                                      </Badge>
+                                      <input
+                                        type="radio"
+                                        checked={isSelected}
+                                        onChange={() => handleProjectResourceChange(resource.id)}
+                                        className="w-4 h-4 text-blue-600"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    {renderResourceConfig(resource.configuration)}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )
+                          })
+                        }
+                        {selectedPhaseData.resources.every(resource => {
+                          const availableQty = resource.quantity - (resource.consumedQuantity || 0)
+                          return availableQty <= 0
+                        }) && (
+                          <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                            <Database className="mx-auto h-10 w-10 mb-3 text-gray-300" />
+                            <p className="font-medium mb-1">All Resources Fully Allocated</p>
+                            <p className="text-sm">All configured resources for this phase have been fully allocated. Please contact your admin or wait for resources to become available.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
 
           {/* Step 4: Configure Resource */}
-          {selectedTemplate && (
+          {(selectedTemplate || selectedProjectResource) && (
             <Card>
               <CardHeader>
                 <CardTitle>
-                  Configure {selectedTemplate.name}
+                  {requestMode === 'template' 
+                    ? `Configure ${selectedTemplate?.name}` 
+                    : `Request ${selectedProjectResource?.resourceType}`
+                  }
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {selectedTemplate.fields
-                  .sort((a, b) => a.sortOrder - b.sortOrder)
-                  .map(field => renderField(field))}
+                {requestMode === 'template' && selectedTemplate && (
+                  <>
+                    {selectedTemplate.fields
+                      .sort((a, b) => a.sortOrder - b.sortOrder)
+                      .map(field => renderField(field))}
+                  </>
+                )}
+                
+                {requestMode === 'project' && selectedProjectResource && (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h6 className="font-medium text-gray-900 mb-2">Resource Configuration</h6>
+                      <div className="space-y-2">
+                        {renderResourceConfig(selectedProjectResource.configuration)}
+                      </div>
+                      <p className="text-sm text-gray-600 mt-2">
+                        This resource has been pre-configured by the admin. You can request a quantity from the available pool.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 
                 <div className="space-y-2">
                   <Label htmlFor="requestedQty">
@@ -453,6 +698,10 @@ export default function NewRequestPage() {
                     id="requestedQty"
                     type="number"
                     min="1"
+                    max={requestMode === 'project' && selectedProjectResource 
+                      ? selectedProjectResource.quantity - (selectedProjectResource.consumedQuantity || 0)
+                      : undefined
+                    }
                     value={formData.requestedQty}
                     onChange={(e) => setFormData(prev => ({
                       ...prev,
@@ -460,6 +709,11 @@ export default function NewRequestPage() {
                     }))}
                     required
                   />
+                  {requestMode === 'project' && selectedProjectResource && (
+                    <p className="text-xs text-gray-500">
+                      Maximum available: {selectedProjectResource.quantity - (selectedProjectResource.consumedQuantity || 0)}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -481,7 +735,7 @@ export default function NewRequestPage() {
           )}
 
           {/* Submit Button */}
-          {selectedTemplate && (
+          {(selectedTemplate || selectedProjectResource) && (
             <div className="flex justify-end">
               <Button 
                 type="submit" 

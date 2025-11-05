@@ -16,6 +16,20 @@ import {
 } from '@/components/ui/table'
 import Navigation from '@/components/navigation'
 
+interface ResourceField {
+  id: string
+  name: string
+  label: string
+  fieldType: 'TEXT' | 'NUMBER' | 'SELECT' | 'BOOLEAN' | 'EMAIL' | 'URL' | 'TEXTAREA'
+  isRequired: boolean
+  defaultValue?: string
+  options?: string
+  unit?: string
+  minValue?: number
+  maxValue?: number
+  sortOrder: number
+}
+
 interface ResourceRequest {
   id: string
   resourceTemplateId?: string
@@ -44,6 +58,7 @@ interface ResourceRequest {
     id: string
     name: string
     description?: string
+    fields?: ResourceField[]
   }
   approvedBy: {
     id: string
@@ -70,45 +85,83 @@ export default function AdminRequestsPage() {
   }
 
   // Helper function to format specs for display
-  const formatSpecs = (configString: string) => {
+  const formatSpecs = (configString: string, resourceTemplate?: { fields?: any[] }) => {
     const config = parseRequestedConfig(configString)
     const specs: string[] = []
     
-    // Dynamically display all configuration fields
-    Object.entries(config).forEach(([key, value]) => {
-      if (value !== null && value !== undefined && value !== '') {
-        // Format the key to be more readable (e.g., "cpuCores" -> "CPU Cores")
-        let formattedKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
+    // If we have a resource template with fields, show all fields (even if not configured)
+    if (resourceTemplate && resourceTemplate.fields && resourceTemplate.fields.length > 0) {
+      // Fetch template fields to show what should be configured
+      resourceTemplate.fields.forEach((field: any) => {
+        const value = config[field.name] ?? field.defaultValue ?? ''
+        const formattedKey = field.label || field.name
         
-        // Handle common field names with special formatting
-        const keyMappings: Record<string, string> = {
-          'cpu': 'CPU',
-          'ram': 'RAM',
-          'disk': 'Disk',
-          'storage': 'Storage',
-          'cpuCores': 'CPU Cores',
-          'ramSize': 'RAM',
-          'diskSize': 'Disk Size',
-          'storageSize': 'Storage',
-          'vCpus': 'vCPUs',
-          'memory': 'Memory'
-        }
-        
-        if (keyMappings[key.toLowerCase()]) {
-          formattedKey = keyMappings[key.toLowerCase()]
-        }
-        
-        // Add appropriate units for common fields
+        // Add appropriate units
         let formattedValue = value
-        if (key.toLowerCase().includes('ram') || key.toLowerCase().includes('memory') || key.toLowerCase().includes('disk') || key.toLowerCase().includes('storage')) {
-          if (typeof value === 'number' && !value.toString().includes('GB') && !value.toString().includes('MB')) {
-            formattedValue = `${value}GB`
-          }
+        if (field.unit && value && !value.toString().includes(field.unit)) {
+          formattedValue = `${value} ${field.unit}`
         }
         
-        specs.push(`${formattedKey}: ${formattedValue}`)
-      }
-    })
+        // Handle boolean values
+        if (field.fieldType === 'BOOLEAN') {
+          formattedValue = value ? 'Yes' : 'No'
+        }
+        
+        // Show if field is configured or using default
+        const isConfigured = config.hasOwnProperty(field.name)
+        const displayValue = formattedValue || 'Not set'
+        const suffix = !isConfigured && field.defaultValue ? ' (default)' : ''
+        
+        specs.push(`${formattedKey}: ${displayValue}${suffix}`)
+      })
+    } else {
+      // Fallback to dynamic parsing for resources without template info
+      Object.entries(config).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+          // Format the key to be more readable (e.g., "cpuCores" -> "CPU Cores")
+          let formattedKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
+          
+          // Handle common field names with special formatting
+          const keyMappings: Record<string, string> = {
+            'cpu': 'CPU',
+            'ram': 'RAM',
+            'disk': 'Disk',
+            'storage': 'Storage',
+            'cpuCores': 'CPU Cores',
+            'ramSize': 'RAM',
+            'diskSize': 'Disk Size',
+            'storageSize': 'Storage',
+            'vCpus': 'vCPUs',
+            'memory': 'Memory',
+            'size': 'Size',
+            'volumeType': 'Volume Type',
+            'iops': 'IOPS',
+            'throughput': 'Throughput',
+            'encrypted': 'Encryption',
+            'region': 'Region'
+          }
+          
+          if (keyMappings[key.toLowerCase()]) {
+            formattedKey = keyMappings[key.toLowerCase()]
+          }
+          
+          // Add appropriate units for common fields
+          let formattedValue = value
+          if ((key.toLowerCase().includes('ram') || key.toLowerCase().includes('memory') || key.toLowerCase().includes('disk') || key.toLowerCase().includes('storage') || key.toLowerCase().includes('size')) && typeof value === 'number') {
+            if (!value.toString().includes('GB') && !value.toString().includes('MB') && !value.toString().includes('TB')) {
+              formattedValue = `${value}GB`
+            }
+          }
+          
+          // Handle boolean values
+          if (typeof value === 'boolean') {
+            formattedValue = value ? 'Yes' : 'No'
+          }
+          
+          specs.push(`${formattedKey}: ${formattedValue}`)
+        }
+      })
+    }
     
     return specs
   }
@@ -260,7 +313,7 @@ export default function AdminRequestsPage() {
                         <TableCell>{getResourceType(request)}</TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            {formatSpecs(request.requestedConfig).map((spec, index) => (
+                            {formatSpecs(request.requestedConfig, request.resourceTemplate).map((spec, index) => (
                               <div key={index}>{spec}</div>
                             ))}
                             <div className="font-medium">Qty: {request.requestedQty}</div>
