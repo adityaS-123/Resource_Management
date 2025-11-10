@@ -14,7 +14,14 @@ export async function GET() {
 
     let requests
 
-    if (session.user.role === 'ADMIN') {
+    // Get user's full profile to check userRole
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true, userRole: true }
+    })
+
+    if (session.user.role === 'ADMIN' || currentUser?.userRole === 'ADMIN') {
+      // Admins see all requests
       requests = await prisma.resourceRequest.findMany({
         include: {
           user: {
@@ -50,13 +57,116 @@ export async function GET() {
               }
             }
           },
+          approvals: {
+            include: {
+              approver: {
+                select: { id: true, name: true, email: true }
+              }
+            },
+            orderBy: { approvalLevel: 'asc' }
+          },
           approvedBy: {
             select: { id: true, name: true, email: true }
           }
         },
         orderBy: { createdAt: 'desc' }
       })
+    } else if (currentUser?.userRole === 'DEPARTMENT_HEAD' || currentUser?.userRole === 'IT_HEAD') {
+      // Department heads and IT heads see requests requiring their approval
+      console.log('Fetching requests for role:', currentUser.userRole, 'User ID:', session.user.id)
+      
+      // First, let's see what approval records exist for this user
+      const allApprovalRecords = await prisma.approvalRecord.findMany({
+        where: {
+          approverId: session.user.id
+        },
+        include: {
+          resourceRequest: {
+            select: {
+              id: true,
+              status: true,
+              currentLevel: true,
+              requiredLevels: true,
+              user: {
+                select: { name: true, email: true }
+              }
+            }
+          }
+        }
+      })
+      
+      console.log('All approval records for user:', allApprovalRecords.map(ar => ({
+        requestId: ar.resourceRequestId,
+        level: ar.approvalLevel,
+        status: ar.status,
+        requestStatus: ar.resourceRequest.status,
+        currentLevel: ar.resourceRequest.currentLevel,
+        requiredLevels: ar.resourceRequest.requiredLevels,
+        requester: ar.resourceRequest.user.name
+      })))
+      
+      requests = await prisma.resourceRequest.findMany({
+        where: {
+          approvals: {
+            some: {
+              approverId: session.user.id,
+              status: 'PENDING'
+            }
+          }
+        },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true }
+          },
+          phase: {
+            include: {
+              project: {
+                select: { id: true, name: true, client: true }
+              }
+            }
+          },
+          resourceTemplate: {
+            select: { 
+              id: true, 
+              name: true, 
+              description: true,
+              fields: {
+                select: {
+                  id: true,
+                  name: true,
+                  label: true,
+                  fieldType: true,
+                  isRequired: true,
+                  defaultValue: true,
+                  options: true,
+                  unit: true,
+                  minValue: true,
+                  maxValue: true,
+                  sortOrder: true
+                },
+                orderBy: { sortOrder: 'asc' }
+              }
+            }
+          },
+          approvals: {
+            include: {
+              approver: {
+                select: { id: true, name: true, email: true }
+              }
+            },
+            orderBy: { approvalLevel: 'asc' }
+          },
+          approvedBy: {
+            select: { id: true, name: true, email: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      })
+      
+      console.log('Found requests for', currentUser.userRole, ':', requests.length)
+      console.log('Request IDs:', requests.map(r => ({ id: r.id, status: r.status, currentLevel: r.currentLevel })))
     } else {
+      // Regular users see only their own requests
       requests = await prisma.resourceRequest.findMany({
         where: { userId: session.user.id },
         include: {
@@ -89,6 +199,14 @@ export async function GET() {
                 orderBy: { sortOrder: 'asc' }
               }
             }
+          },
+          approvals: {
+            include: {
+              approver: {
+                select: { id: true, name: true, email: true }
+              }
+            },
+            orderBy: { approvalLevel: 'asc' }
           },
           approvedBy: {
             select: { id: true, name: true, email: true }
@@ -272,9 +390,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Determine if this should be auto-approved (project-specific resources)
-    const isProjectResource = !!resourceId
-    const shouldAutoApprove = isProjectResource
+    // Determine approval workflow based on request type
+    // REMOVED AUTO-APPROVAL: All requests now require at least Level 1 approval
+    let shouldAutoApprove = false
+    let requiredLevels = 1 // Minimum Level 1 approval required
+
+    // For resource template requests, check approval levels (but minimum is 1)
+    if (resourceTemplateId) {
+      const resourceTemplate = await prisma.resourceTemplate.findUnique({
+        where: { id: resourceTemplateId },
+        select: { approvalLevels: true }
+      })
+
+      if (resourceTemplate) {
+        // Ensure minimum Level 1 approval, even if template says 0
+        requiredLevels = Math.max(resourceTemplate.approvalLevels || 1, 1)
+        shouldAutoApprove = false // Never auto-approve
+      }
+    }
 
     const resourceRequestData: any = {
       userId: session.user.id,
@@ -282,9 +415,10 @@ export async function POST(request: NextRequest) {
       requestedConfig: JSON.stringify(requestedConfig),
       requestedQty: parseInt(requestedQty),
       justification,
-      status: shouldAutoApprove ? 'APPROVED' : 'PENDING',
-      approvedAt: shouldAutoApprove ? new Date() : null,
-      approvedById: shouldAutoApprove ? session.user.id : null // System auto-approval
+      requiredLevels,
+      status: 'PENDING', // Always PENDING - no auto-approval
+      approvedAt: null,
+      approvedById: null
     }
 
     // Add either resourceTemplateId, resourceId, or resourceType
@@ -311,6 +445,7 @@ export async function POST(request: NextRequest) {
               id: true, 
               name: true, 
               description: true,
+              approvalLevels: true,
               fields: {
                 select: {
                   id: true,
@@ -329,64 +464,116 @@ export async function POST(request: NextRequest) {
               }
             }
           } : undefined,
+          approvals: {
+            include: {
+              approver: {
+                select: { id: true, name: true, email: true }
+              }
+            },
+            orderBy: { approvalLevel: 'asc' }
+          },
           phase: {
             include: {
               project: {
                 select: { id: true, name: true, client: true }
               }
             }
-          },
-          approvedBy: shouldAutoApprove ? {
-            select: { id: true, name: true, email: true }
-          } : undefined
+          }
         }
       })
 
-      // If auto-approved and project-specific resource, update consumed quantity
-      if (shouldAutoApprove && resourceId) {
-        await tx.resource.update({
-          where: { id: resourceId },
-          data: {
-            consumedQuantity: {
-              increment: parseInt(requestedQty)
-            }
-          }
+      // NO AUTO-APPROVAL: Never update consumed quantity during request creation
+      // Resources are only consumed after IT team completion
+
+      // ALL requests require approval, create the first approval record
+      if (requiredLevels > 0) {
+        // Always start with Level 1 approval (Department Head)
+        // Level 1 is MANDATORY for all requests
+        const firstApprovalLevel = 1
+
+        // Find the department head for this request
+        // Get the requester's department
+        const requester = await tx.user.findUnique({
+          where: { id: session.user.id },
+          select: { departmentId: true }
         })
+
+        let departmentHeadId: string | null = null
+        if (requester?.departmentId) {
+          const department = await tx.department.findUnique({
+            where: { id: requester.departmentId },
+            select: { headId: true }
+          })
+          departmentHeadId = department?.headId || null
+        }
+
+        // Create Level 1 approval record (always for department head)
+        if (departmentHeadId) {
+          await tx.approvalRecord.create({
+            data: {
+              resourceRequestId: createdRequest.id,
+              approverId: departmentHeadId,
+              approvalLevel: firstApprovalLevel,
+              status: 'PENDING'
+            }
+          })
+        }
       }
 
       return createdRequest
     })
 
-    // Send email notification to admin
+    // Send email notification to appropriate approver
     try {
-      // Get admin users
-      const adminUsers = await prisma.user.findMany({
-        where: { role: 'ADMIN' },
-        select: { email: true }
-      })
+      // ALL requests require approval now - send to department head for Level 1 approval
+      if (requiredLevels > 0) {
+        // Get the requester's department and department head
+        const requester = await prisma.user.findUnique({
+          where: { id: session.user.id },
+          select: { departmentId: true }
+        })
 
-      if (adminUsers.length > 0) {
-        // Prepare email data
-        const emailData = {
-          requestId: resourceRequest.id,
-          userEmail: resourceRequest.user.email,
-          userName: resourceRequest.user.name || resourceRequest.user.email,
-          projectName: resourceRequest.phase.project.name,
-          client: resourceRequest.phase.project.client,
-          phaseName: resourceRequest.phase.name,
-          resourceType: resourceRequest.resourceTemplate?.name || resourceType || 'Resource',
-          resourceName: resourceRequest.resourceTemplate?.name,
-          requestedQuantity: resourceRequest.requestedQty,
-          requestedConfig: JSON.parse(resourceRequest.requestedConfig),
-          justification: resourceRequest.justification || undefined,
-          status: resourceRequest.status as 'PENDING' | 'APPROVED',
-          isAutoApproved: shouldAutoApprove,
-          requestUrl: `${process.env.NEXTAUTH_URL}/admin/requests`
-        }
+        if (requester?.departmentId) {
+          const department = await prisma.department.findUnique({
+            where: { id: requester.departmentId },
+            include: {
+              head: {
+                select: { email: true, name: true }
+              }
+            }
+          })
 
-        // Send emails to all admins
-        for (const admin of adminUsers) {
-          await sendResourceRequestNotification(admin.email, emailData)
+          if (department?.head) {
+            // Prepare email data
+            const emailData = {
+              requestId: resourceRequest.id,
+              userEmail: resourceRequest.user.email,
+              userName: resourceRequest.user.name || resourceRequest.user.email,
+              projectName: resourceRequest.phase.project.name,
+              client: resourceRequest.phase.project.client,
+              phaseName: resourceRequest.phase.name,
+              resourceType: resourceRequest.resourceTemplate?.name || resourceRequest.resourceType || 'Resource',
+              resourceName: resourceRequest.resourceTemplate?.name,
+              requestedQuantity: resourceRequest.requestedQty,
+              requestedConfig: JSON.parse(resourceRequest.requestedConfig),
+              justification: resourceRequest.justification || undefined,
+              status: resourceRequest.status as 'PENDING',
+              isAutoApproved: false, // Never auto-approved now
+              approverRole: 'DEPARTMENT_HEAD',
+              approverName: department.head.name || department.head.email
+            }
+
+            // Send to department head for first approval
+            await fetch(`${process.env.NEXTAUTH_URL}/api/notifications/email`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                to: department.head.email,
+                type: 'resource-request',
+                data: emailData
+              })
+            })
+          }
         }
       }
     } catch (emailError) {

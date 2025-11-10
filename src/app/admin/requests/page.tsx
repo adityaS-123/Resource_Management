@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -37,7 +38,9 @@ interface ResourceRequest {
   requestedConfig: string // JSON string containing the actual requested specs
   requestedQty: number
   justification: string | null
-  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'IN_PROGRESS' | 'ASSIGNED_TO_IT' | 'COMPLETED'
+  currentLevel: number
+  requiredLevels: number
   createdAt: string
   rejectionReason: string | null
   user: {
@@ -60,6 +63,18 @@ interface ResourceRequest {
     description?: string
     fields?: ResourceField[]
   }
+  approvals: Array<{
+    id: string
+    approvalLevel: number
+    status: 'PENDING' | 'APPROVED' | 'REJECTED'
+    approver: {
+      id: string
+      name: string
+      email: string
+    }
+    approvedAt?: string
+    comments?: string
+  }>
   approvedBy: {
     id: string
     name: string
@@ -67,11 +82,70 @@ interface ResourceRequest {
 }
 
 export default function AdminRequestsPage() {
+  const { data: session } = useSession()
   const [requests, setRequests] = useState<ResourceRequest[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL')
+  const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'IN_PROGRESS' | 'APPROVED' | 'REJECTED' | 'ASSIGNED_TO_IT' | 'COMPLETED'>('ALL')
   const [selectedRequest, setSelectedRequest] = useState<string | null>(null)
   const [rejectionReason, setRejectionReason] = useState('')
+
+  // Helper function to get current user's role info
+  const getCurrentUserInfo = () => {
+    if (!session?.user) return { role: 'NONE', approvalLevel: 0 }
+    
+    const userRole = (session.user as any).userRole || (session.user as any).role
+    let approvalLevel = 0
+    
+    if (userRole === 'DEPARTMENT_HEAD') {
+      approvalLevel = 1
+    } else if (userRole === 'IT_HEAD') {
+      approvalLevel = 2
+    } else if (userRole === 'ADMIN') {
+      approvalLevel = 3
+    }
+    
+    return { role: userRole, approvalLevel }
+  }
+
+  // Function to check if current user can approve a request
+  const canUserApproveRequest = (request: ResourceRequest) => {
+    if (!session?.user) return false
+
+    // Get current user's approval level
+    let userApprovalLevel = 0
+    const userRole = (session.user as any).userRole || (session.user as any).role
+
+    if (userRole === 'DEPARTMENT_HEAD') {
+      userApprovalLevel = 1
+    } else if (userRole === 'IT_HEAD') {
+      userApprovalLevel = 2
+    } else if (userRole === 'ADMIN') {
+      userApprovalLevel = 3
+    }
+
+    // Check if request is in a state that can be approved
+    if (request.status !== 'PENDING' && request.status !== 'IN_PROGRESS') {
+      return false
+    }
+
+    // Calculate the next required approval level
+    const nextRequiredLevel = request.currentLevel + 1
+
+    // User can approve if their level matches the next required level
+    const canApprove = userApprovalLevel === nextRequiredLevel && nextRequiredLevel <= request.requiredLevels
+
+    console.log('Approval check:', {
+      requestId: request.id,
+      userRole,
+      userApprovalLevel,
+      currentLevel: request.currentLevel,
+      nextRequiredLevel,
+      requiredLevels: request.requiredLevels,
+      canApprove
+    })
+
+    return canApprove
+  }
 
   // Helper function to parse and display requested configuration
   const parseRequestedConfig = (configString: string) => {
@@ -179,8 +253,10 @@ export default function AdminRequestsPage() {
   useEffect(() => {
     const fetchRequests = async () => {
       try {
+        console.log('Fetching requests for department head...')
         const response = await fetch('/api/requests')
         const data = await response.json()
+        console.log('Requests received:', data)
         setRequests(data)
       } catch (error) {
         console.error('Error fetching requests:', error)
@@ -192,40 +268,78 @@ export default function AdminRequestsPage() {
     fetchRequests()
   }, [])
 
-  const handleApproval = async (requestId: string, status: 'APPROVED' | 'REJECTED') => {
+  const handleApproval = async (requestId: string, action: 'approve' | 'reject') => {
     try {
-      const response = await fetch(`/api/requests/${requestId}/approve`, {
+      console.log('Submitting approval:', { requestId, action, comments: action === 'reject' ? rejectionReason : undefined })
+      
+      const response = await fetch('/api/approvals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          status,
-          rejectionReason: status === 'REJECTED' ? rejectionReason : undefined
+          requestId,
+          action,
+          comments: action === 'reject' ? rejectionReason : undefined
         })
       })
 
+      console.log('Approval response status:', response.status)
+      
       if (response.ok) {
         const updatedRequest = await response.json()
+        console.log('Approval successful:', updatedRequest)
         setRequests(requests.map(req => 
           req.id === requestId ? updatedRequest : req
         ))
         setSelectedRequest(null)
         setRejectionReason('')
+        
+        // Show success message
+        const actionText = action === 'approve' ? 'approved' : 'rejected'
+        alert(`Request ${actionText} successfully!`)
+        
+        // Refresh the page to get updated data
+        window.location.reload()
+      } else {
+        const errorData = await response.json()
+        console.error('Error updating request:', errorData.error)
+        
+        // Provide user-friendly error messages
+        let errorMessage = errorData.error || 'Failed to process approval'
+        
+        if (errorData.error?.includes('level') && errorData.error?.includes('approval')) {
+          errorMessage = `You don't have permission to approve this request. ${errorData.error}`
+        }
+        
+        alert(errorMessage)
       }
     } catch (error) {
       console.error('Error updating request:', error)
+      alert('Failed to process approval. Please try again.')
     }
   }
 
   const getStatusBadge = (status: string) => {
     const colors = {
       PENDING: 'bg-yellow-100 text-yellow-800',
+      IN_PROGRESS: 'bg-blue-100 text-blue-800',
       APPROVED: 'bg-green-100 text-green-800',
-      REJECTED: 'bg-red-100 text-red-800'
+      REJECTED: 'bg-red-100 text-red-800',
+      ASSIGNED_TO_IT: 'bg-purple-100 text-purple-800',
+      COMPLETED: 'bg-emerald-100 text-emerald-800'
+    }
+
+    const labels = {
+      PENDING: 'Pending',
+      IN_PROGRESS: 'In Progress',
+      APPROVED: 'Approved',
+      REJECTED: 'Rejected',
+      ASSIGNED_TO_IT: 'Assigned to IT',
+      COMPLETED: 'Completed'
     }
 
     return (
       <Badge className={colors[status as keyof typeof colors]}>
-        {status}
+        {labels[status as keyof typeof labels] || status}
       </Badge>
     )
   }
@@ -255,15 +369,26 @@ export default function AdminRequestsPage() {
         <div className="px-4 py-6 sm:px-0">
           <h1 className="text-3xl font-bold text-gray-900 mb-8">Resource Requests</h1>
 
+          {/* User Role Info (for debugging) */}
+          {session?.user && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="text-sm">
+                <strong>Current User:</strong> {(session.user as any).name || session.user.email} | 
+                <strong> Role:</strong> {getCurrentUserInfo().role} | 
+                <strong> Approval Level:</strong> {getCurrentUserInfo().approvalLevel}
+              </div>
+            </div>
+          )}
+
           {/* Filter Buttons */}
           <div className="flex space-x-2 mb-6">
-            {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((status) => (
+            {['ALL', 'PENDING', 'IN_PROGRESS', 'APPROVED', 'ASSIGNED_TO_IT', 'COMPLETED', 'REJECTED'].map((status) => (
               <Button
                 key={status}
                 variant={filter === status ? 'default' : 'outline'}
                 onClick={() => setFilter(status as any)}
               >
-                {status}
+                {status.replace('_', ' ')}
               </Button>
             ))}
           </div>
@@ -324,11 +449,11 @@ export default function AdminRequestsPage() {
                           {new Date(request.createdAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          {request.status === 'PENDING' ? (
+                          {canUserApproveRequest(request) ? (
                             <div className="flex space-x-2">
                               <Button
                                 size="sm"
-                                onClick={() => handleApproval(request.id, 'APPROVED')}
+                                onClick={() => handleApproval(request.id, 'approve')}
                               >
                                 Approve
                               </Button>
@@ -340,9 +465,20 @@ export default function AdminRequestsPage() {
                                 Reject
                               </Button>
                             </div>
+                          ) : (request.status === 'PENDING' || request.status === 'IN_PROGRESS') ? (
+                            <div className="text-sm text-gray-500">
+                              <div>Level {request.currentLevel + 1} approval required</div>
+                              <div className="text-xs">
+                                {request.currentLevel + 1 === 1 ? 'Department Head' :
+                                 request.currentLevel + 1 === 2 ? 'IT Head' :
+                                 request.currentLevel + 1 === 3 ? 'Admin' : 'Higher Level'}
+                              </div>
+                            </div>
                           ) : (
                             <span className="text-sm text-gray-500">
-                              {request.status === 'APPROVED' ? 'Approved' : 'Rejected'}
+                              {request.status === 'APPROVED' ? 'Approved' : 
+                               request.status === 'ASSIGNED_TO_IT' ? 'Assigned to IT' :
+                               request.status === 'COMPLETED' ? 'Completed' : 'Rejected'}
                               {request.approvedBy && ` by ${request.approvedBy.name}`}
                             </span>
                           )}
@@ -377,7 +513,7 @@ export default function AdminRequestsPage() {
                     </div>
                     <div className="flex space-x-2">
                       <Button
-                        onClick={() => handleApproval(selectedRequest, 'REJECTED')}
+                        onClick={() => handleApproval(selectedRequest, 'reject')}
                         variant="destructive"
                         disabled={!rejectionReason.trim()}
                       >

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { signIn, getSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
@@ -9,6 +9,19 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ThemeToggle } from '@/components/theme-toggle'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
+interface Department {
+  id: string
+  name: string
+  description?: string
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -17,7 +30,31 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [isRegister, setIsRegister] = useState(false)
   const [name, setName] = useState('')
+  const [departmentId, setDepartmentId] = useState('')
+  const [departments, setDepartments] = useState<Department[]>([])
+  const [loadingDepts, setLoadingDepts] = useState(false)
   const router = useRouter()
+
+  // Fetch departments when registration form is shown
+  useEffect(() => {
+    if (isRegister && departments.length === 0) {
+      fetchDepartments()
+    }
+  }, [isRegister])
+
+  const fetchDepartments = async () => {
+    setLoadingDepts(true)
+    try {
+      const res = await fetch('/api/departments')
+      const data = await res.json()
+      setDepartments(data)
+    } catch (err) {
+      console.error('Error fetching departments:', err)
+      setError('Failed to load departments')
+    } finally {
+      setLoadingDepts(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,7 +66,12 @@ export default function LoginPage() {
         const res = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password })
+          body: JSON.stringify({ 
+            name, 
+            email, 
+            password,
+            departmentId: departmentId || null
+          })
         })
 
         if (res.ok) {
@@ -38,6 +80,7 @@ export default function LoginPage() {
           setName('')
           setEmail('')
           setPassword('')
+          setDepartmentId('')
         } else {
           const data = await res.json()
           setError(data.error || 'Registration failed')
@@ -107,18 +150,37 @@ export default function LoginPage() {
         <CardContent className="space-y-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             {isRegister && (
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-sm font-medium">Full Name</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="input-enhanced"
-                  placeholder="Enter your full name"
-                  required
-                />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-sm font-medium">Full Name</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="input-enhanced"
+                    placeholder="Enter your full name"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="department" className="text-sm font-medium">Department (Optional)</Label>
+                  <Select value={departmentId} onValueChange={setDepartmentId} disabled={loadingDepts}>
+                    <SelectTrigger id="department" className="input-enhanced">
+                      <SelectValue placeholder={loadingDepts ? "Loading departments..." : "Select a department"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id}>
+                          {dept.name}
+                          {dept.description && ` - ${dept.description}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Choose your department. You can update this later.</p>
+                </div>
+              </>
             )}
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">Email Address</Label>

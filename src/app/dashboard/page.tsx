@@ -54,7 +54,7 @@ interface DashboardStats {
   totalProjects: number
   totalRequests: number
   pendingRequests: number
-  approvedRequests: number
+  completedRequests: number
 }
 
 export default function UserDashboard() {
@@ -63,7 +63,7 @@ export default function UserDashboard() {
     totalProjects: 0,
     totalRequests: 0,
     pendingRequests: 0,
-    approvedRequests: 0
+    completedRequests: 0
   })
   const [loading, setLoading] = useState(true)
 
@@ -81,13 +81,13 @@ export default function UserDashboard() {
         setProjects(projectsData)
 
         const pendingRequests = requestsData.filter((r: any) => r.status === 'PENDING').length
-        const approvedRequests = requestsData.filter((r: any) => r.status === 'APPROVED').length
+        const completedRequests = requestsData.filter((r: any) => r.status === 'COMPLETED').length
 
         setStats({
           totalProjects: projectsData.length,
           totalRequests: requestsData.length,
           pendingRequests,
-          approvedRequests
+          completedRequests
         })
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
@@ -101,40 +101,17 @@ export default function UserDashboard() {
 
   if (loading) {
     return (
-      <div>
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
         <Navigation />
-        <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-          <div className="px-4 py-6 sm:px-0">
-            <div className="animate-pulse">
-              <div className="h-8 bg-gray-300 rounded w-1/4 mb-8"></div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                {[...Array(4)].map((_, i) => (
-                  <Card key={i}>
-                    <CardHeader className="pb-2">
-                      <div className="h-4 bg-gray-300 rounded w-3/4"></div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-8 bg-gray-300 rounded w-1/2"></div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-              <Card>
-                <CardHeader>
-                  <div className="h-6 bg-gray-300 rounded w-1/3"></div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {[...Array(2)].map((_, i) => (
-                      <div key={i} className="border rounded-lg p-4">
-                        <div className="h-4 bg-gray-300 rounded w-1/2 mb-2"></div>
-                        <div className="h-3 bg-gray-300 rounded w-1/3"></div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <div className="space-y-8 animate-pulse">
+            <div className="h-20 bg-muted/30 rounded-2xl"></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-32 bg-muted/30 rounded-2xl"></div>
+              ))}
             </div>
+            <div className="h-96 bg-muted/30 rounded-2xl"></div>
           </div>
         </div>
       </div>
@@ -229,7 +206,7 @@ export default function UserDashboard() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-medium text-emerald-700">
-                    Approved Requests
+                    Completed Requests
                   </CardTitle>
                   <div className="p-2 bg-emerald-100 rounded-lg">
                     <CheckCircle className="h-5 w-5 text-emerald-600" />
@@ -238,11 +215,11 @@ export default function UserDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-emerald-600">
-                  {stats.approvedRequests}
+                  {stats.completedRequests}
                 </div>
                 <div className="flex items-center gap-1 mt-1">
                   <CheckCircle className="h-3 w-3 text-emerald-600" />
-                  <span className="text-xs text-muted-foreground">Ready to use</span>
+                  <span className="text-xs text-muted-foreground">Resources delivered</span>
                 </div>
               </CardContent>
             </Card>

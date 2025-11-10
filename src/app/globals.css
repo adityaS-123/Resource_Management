@@ -131,73 +131,110 @@
   
   .logo-container img {
     @apply object-contain max-w-full max-h-full;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
   }
   
   .glass-card {
-    @apply bg-white/80 backdrop-blur-sm border border-white/20 shadow-xl;
+    @apply bg-white/90 backdrop-blur-lg border border-white/30 shadow-2xl;
   }
   
   .gradient-bg {
-    background: linear-gradient(135deg, #040f47 0%, #0a1b6b 100%);
+    background: linear-gradient(135deg, #040f47 0%, #0a1b6b 50%, #1e40af 100%);
   }
   
   .dark .gradient-bg {
-    background: linear-gradient(135deg, #020a30 0%, #051144 100%);
+    background: linear-gradient(135deg, #020a30 0%, #051144 50%, #0f172a 100%);
   }
   
   .text-gradient {
-    background: linear-gradient(135deg, #040f47 0%, #0a1b6b 100%);
+    background: linear-gradient(135deg, #040f47 0%, #0a1b6b 50%, #1e40af 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
   
   .hover-lift {
-    @apply transition-all duration-300 ease-in-out;
+    @apply transition-all duration-500 ease-out;
   }
   
   .hover-lift:hover {
-    @apply transform -translate-y-1 shadow-xl;
+    @apply transform -translate-y-2 scale-[1.02] shadow-2xl;
   }
   
   .card-enhanced {
-    @apply bg-card border border-border/50 rounded-xl shadow-lg backdrop-blur-sm;
-    @apply hover:shadow-xl hover:border-border transition-all duration-300;
+    @apply bg-card/80 border border-border/30 rounded-2xl shadow-xl backdrop-blur-md;
+    @apply hover:shadow-2xl hover:border-border/60 transition-all duration-500;
+    @apply relative overflow-hidden;
+  }
+  
+  .card-enhanced::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none;
   }
   
   .btn-primary {
-    @apply bg-primary text-primary-foreground hover:bg-primary/90;
-    @apply shadow-lg hover:shadow-xl transition-all duration-300;
-    @apply border border-primary/20;
+    @apply bg-gradient-to-r from-primary to-primary/90 text-primary-foreground;
+    @apply hover:from-primary/90 hover:to-primary/80 hover:shadow-xl hover:scale-105;
+    @apply shadow-lg transition-all duration-300 border border-primary/20;
+    @apply font-semibold tracking-wide;
   }
   
   .btn-secondary {
-    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80;
-    @apply shadow-md hover:shadow-lg transition-all duration-300;
-    @apply border border-secondary/20;
+    @apply bg-gradient-to-r from-secondary to-secondary/90 text-secondary-foreground;
+    @apply hover:from-secondary/90 hover:to-secondary/80 hover:shadow-lg hover:scale-105;
+    @apply shadow-md transition-all duration-300 border border-secondary/20;
   }
   
   .input-enhanced {
-    @apply bg-background border border-border/50 focus:border-primary/50;
-    @apply focus:ring-2 focus:ring-primary/20 transition-all duration-200;
+    @apply bg-background/90 border-2 border-border/50 focus:border-primary/70;
+    @apply focus:ring-4 focus:ring-primary/20 transition-all duration-300;
+    @apply backdrop-blur-sm rounded-xl;
   }
   
   .nav-enhanced {
-    @apply bg-white/95 backdrop-blur-md border-b border-border/50;
-    @apply shadow-lg;
+    @apply bg-white/95 backdrop-blur-xl border-b border-border/20;
+    @apply shadow-xl shadow-primary/5;
     @apply dark:bg-gray-900/95;
   }
   
   .status-pending {
-    @apply bg-amber-50 text-amber-700 border-amber-200;
+    @apply bg-gradient-to-r from-amber-50 to-yellow-50 text-amber-800 border border-amber-300;
+    @apply shadow-sm;
   }
   
   .status-approved {
-    @apply bg-emerald-50 text-emerald-700 border-emerald-200;
+    @apply bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-800 border border-emerald-300;
+    @apply shadow-sm;
   }
   
   .status-rejected {
-    @apply bg-red-50 text-red-700 border-red-200;
+    @apply bg-gradient-to-r from-red-50 to-rose-50 text-red-800 border border-red-300;
+    @apply shadow-sm;
+  }
+  
+  .table-enhanced {
+    @apply relative overflow-hidden rounded-2xl border border-border/30;
+  }
+  
+  .table-enhanced tbody tr:nth-child(even) {
+    @apply bg-muted/30;
+  }
+  
+  .table-enhanced tbody tr:hover {
+    @apply bg-muted/50 transition-colors duration-200;
+  }
+  
+  .badge-enhanced {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium;
+    @apply shadow-sm border transition-all duration-200;
+  }
+  
+  .modal-overlay {
+    @apply bg-black/60 backdrop-blur-sm;
+  }
+  
+  .modal-content {
+    @apply bg-background/95 backdrop-blur-xl border border-border/50 shadow-2xl;
+    @apply rounded-3xl;
   }
 }

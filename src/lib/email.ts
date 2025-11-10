@@ -46,9 +46,25 @@ interface ResourceRequestNotificationData {
   requestedQuantity: number
   requestedConfig: any
   justification?: string
-  status: 'PENDING' | 'APPROVED'
-  isAutoApproved: boolean
+  status: 'PENDING'
   requestUrl: string
+}
+
+// Interface for approval notification email data
+interface ApprovalNotificationData {
+  requestId: string
+  status: 'APPROVED' | 'REJECTED' | 'PENDING_APPROVAL' | 'ASSIGNED_TO_IT'
+  approverName?: string
+  approverLevel?: number
+  requiredLevel?: number
+  comments?: string
+  resourceType: string
+  projectName: string
+  userEmail?: string
+  userName?: string
+  requestedConfig?: any
+  requestedQuantity?: number
+  justification?: string
 }
 
 // Email templates
@@ -147,7 +163,7 @@ Thank you!
   }),
 
   resourceRequestNotification: (data: ResourceRequestNotificationData) => ({
-    subject: `${data.isAutoApproved ? '✅ Resource Auto-Approved' : '🔔 New Resource Request'} - ${data.projectName}`,
+    subject: `🔔 New Resource Request - ${data.projectName}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -158,11 +174,11 @@ Thank you!
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: ${data.isAutoApproved ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)'}; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+          .header { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
           .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 8px 8px; }
-          .request-info { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${data.isAutoApproved ? '#10b981' : '#3b82f6'}; }
+          .request-info { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6; }
           .config-item { background: #f1f3f4; padding: 8px 12px; margin: 5px 0; border-radius: 4px; font-size: 14px; }
-          .status-badge { display: inline-block; padding: 6px 12px; border-radius: 4px; font-weight: bold; color: white; background: ${data.isAutoApproved ? '#10b981' : '#f59e0b'}; }
+          .status-badge { display: inline-block; padding: 6px 12px; border-radius: 4px; font-weight: bold; color: white; background: #f59e0b; }
           .btn { display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
           .btn:hover { background: #2563eb; }
           .footer { text-align: center; color: #666; margin-top: 30px; font-size: 14px; }
@@ -172,8 +188,8 @@ Thank you!
       <body>
         <div class="container">
           <div class="header">
-            <h1>${data.isAutoApproved ? '✅ Resource Auto-Approved' : '🔔 New Resource Request'}</h1>
-            <p>${data.isAutoApproved ? 'A project resource has been automatically allocated' : 'A new resource request requires your review'}</p>
+            <h1>🔔 New Resource Request</h1>
+            <p>A new resource request requires your review</p>
           </div>
           
           <div class="content">
@@ -200,17 +216,10 @@ Thank you!
               </div>
             ` : ''}
             
-            ${!data.isAutoApproved ? `
-              <div class="urgent">
-                <h4>⏰ Action Required</h4>
-                <p>This resource request requires admin approval. Please review the request details and approve or reject as appropriate.</p>
-              </div>
-            ` : `
-              <div class="request-info">
-                <h4>ℹ️ Auto-Approval Information</h4>
-                <p>This request was automatically approved because it's for a project-specific resource that was already allocated to this project phase.</p>
-              </div>
-            `}
+            <div class="urgent">
+              <h4>⏰ Action Required</h4>
+              <p>This resource request requires approval. Please review the request details and approve or reject as appropriate.</p>
+            </div>
             
             <div style="text-align: center;">
               <a href="${data.requestUrl}" class="btn">📊 View Request Details</a>
@@ -228,13 +237,13 @@ Thank you!
     text: `
 Resource Request Notification
 
-${data.isAutoApproved ? 'RESOURCE AUTO-APPROVED' : 'NEW RESOURCE REQUEST'}
+NEW RESOURCE REQUEST
 
 Request Details:
 - ID: ${data.requestId}
 - Status: ${data.status}
 - Requested by: ${data.userName} (${data.userEmail})
-- Project: ${data.projectName} - ${data.client}
+- Project: ${data.projectName}${data.client ? ` - ${data.client}` : ''}
 - Phase: ${data.phaseName}
 - Resource: ${data.resourceName || data.resourceType}
 - Quantity: ${data.requestedQuantity}
@@ -243,12 +252,181 @@ ${data.justification ? `- Justification: ${data.justification}` : ''}
 Configuration:
 ${Object.entries(data.requestedConfig).map(([key, value]) => `- ${key}: ${value}`).join('\n')}
 
-${data.isAutoApproved ? 
-  'This request was automatically approved for a project-specific resource.' : 
-  'This request requires admin approval. Please review at: ' + data.requestUrl
-}
+This request requires approval. Please review at: ${data.requestUrl}
 
 Request submitted on ${new Date().toLocaleDateString()}
+    `
+  }),
+
+  approvalNotification: (data: ApprovalNotificationData) => ({
+    subject: `${
+      data.status === 'APPROVED' ? '✅ Request Approved' :
+      data.status === 'REJECTED' ? '❌ Request Rejected' :
+      data.status === 'PENDING_APPROVAL' ? '🔔 Approval Required' :
+      '📋 Task Assigned'
+    } - ${data.projectName}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Approval Notification</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { 
+            background: ${
+              data.status === 'APPROVED' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
+              data.status === 'REJECTED' ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' :
+              data.status === 'PENDING_APPROVAL' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' :
+              'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)'
+            }; 
+            color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; 
+          }
+          .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 8px 8px; }
+          .request-info { 
+            background: white; padding: 20px; border-radius: 8px; margin: 20px 0; 
+            border-left: 4px solid ${
+              data.status === 'APPROVED' ? '#10b981' :
+              data.status === 'REJECTED' ? '#ef4444' :
+              data.status === 'PENDING_APPROVAL' ? '#f59e0b' :
+              '#3b82f6'
+            }; 
+          }
+          .config-item { background: #f1f3f4; padding: 8px 12px; margin: 5px 0; border-radius: 4px; font-size: 14px; }
+          .status-badge { 
+            display: inline-block; padding: 6px 12px; border-radius: 4px; font-weight: bold; color: white; 
+            background: ${
+              data.status === 'APPROVED' ? '#10b981' :
+              data.status === 'REJECTED' ? '#ef4444' :
+              data.status === 'PENDING_APPROVAL' ? '#f59e0b' :
+              '#3b82f6'
+            }; 
+          }
+          .btn { display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+          .btn:hover { background: #2563eb; }
+          .footer { text-align: center; color: #666; margin-top: 30px; font-size: 14px; }
+          .action-required { background: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 6px; margin: 20px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>${
+              data.status === 'APPROVED' ? '✅ Request Approved' :
+              data.status === 'REJECTED' ? '❌ Request Rejected' :
+              data.status === 'PENDING_APPROVAL' ? '🔔 Approval Required' :
+              '📋 Task Assigned to IT Team'
+            }</h1>
+            <p>${
+              data.status === 'APPROVED' ? 'Your resource request has been approved!' :
+              data.status === 'REJECTED' ? 'Your resource request has been rejected' :
+              data.status === 'PENDING_APPROVAL' ? `Level ${data.requiredLevel} approval is required` :
+              'A new task has been assigned to the IT team'
+            }</p>
+          </div>
+          
+          <div class="content">
+            <div class="request-info">
+              <h2>📋 Request Details</h2>
+              <p><strong>Request ID:</strong> ${data.requestId}</p>
+              <p><strong>Status:</strong> <span class="status-badge">${data.status.replace('_', ' ')}</span></p>
+              <p><strong>Resource Type:</strong> ${data.resourceType}</p>
+              <p><strong>Project:</strong> ${data.projectName}</p>
+              ${data.userEmail ? `<p><strong>Requested by:</strong> ${data.userName || data.userEmail} (${data.userEmail})</p>` : ''}
+              ${data.requestedQuantity ? `<p><strong>Quantity:</strong> ${data.requestedQuantity}</p>` : ''}
+              ${data.approverName ? `<p><strong>Approved by:</strong> ${data.approverName} (Level ${data.approverLevel})</p>` : ''}
+            </div>
+
+            ${data.requestedConfig && Object.keys(data.requestedConfig).length > 0 ? `
+              <div class="request-info">
+                <h3>⚙️ Resource Configuration</h3>
+                ${Object.entries(data.requestedConfig).map(([key, value]) => `
+                  <div class="config-item">
+                    <strong>${key.replace(/([A-Z])/g, ' $1').toLowerCase()}:</strong> ${value}
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+
+            ${data.justification ? `
+              <div class="request-info">
+                <h3>💬 Justification</h3>
+                <p>${data.justification}</p>
+              </div>
+            ` : ''}
+
+            ${data.comments ? `
+              <div class="request-info">
+                <h3>💬 ${data.status === 'REJECTED' ? 'Rejection Reason' : 'Comments'}</h3>
+                <p>${data.comments}</p>
+              </div>
+            ` : ''}
+
+            ${data.status === 'PENDING_APPROVAL' ? `
+              <div class="action-required">
+                <h4>⏰ Action Required</h4>
+                <p>This resource request requires Level ${data.requiredLevel} approval. Please review and approve or reject as appropriate.</p>
+              </div>
+            ` : ''}
+
+            ${data.status === 'ASSIGNED_TO_IT' ? `
+              <div class="action-required">
+                <h4>🔧 IT Task Assignment</h4>
+                <p>Please provision the requested resource and provide the necessary details/credentials to the user.</p>
+              </div>
+            ` : ''}
+
+            ${data.status === 'APPROVED' ? `
+              <div class="request-info">
+                <h4>✅ Next Steps</h4>
+                <p>Your request has been approved and assigned to the IT team for provisioning. You will receive the resource details and credentials once ready.</p>
+              </div>
+            ` : ''}
+            
+            <div class="footer">
+              <p>Resource Management System - Approval Notification</p>
+              <p>Notification sent on ${new Date().toLocaleDateString()}</p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `
+${
+  data.status === 'APPROVED' ? 'RESOURCE REQUEST APPROVED' :
+  data.status === 'REJECTED' ? 'RESOURCE REQUEST REJECTED' :
+  data.status === 'PENDING_APPROVAL' ? 'APPROVAL REQUIRED' :
+  'TASK ASSIGNED TO IT TEAM'
+}
+
+Request Details:
+- ID: ${data.requestId}
+- Status: ${data.status.replace('_', ' ')}
+- Resource: ${data.resourceType}
+- Project: ${data.projectName}
+${data.userEmail ? `- Requested by: ${data.userName || data.userEmail} (${data.userEmail})` : ''}
+${data.requestedQuantity ? `- Quantity: ${data.requestedQuantity}` : ''}
+${data.approverName ? `- Approved by: ${data.approverName} (Level ${data.approverLevel})` : ''}
+
+${data.requestedConfig && Object.keys(data.requestedConfig).length > 0 ? `
+Configuration:
+${Object.entries(data.requestedConfig).map(([key, value]) => `- ${key}: ${value}`).join('\n')}
+` : ''}
+
+${data.justification ? `Justification: ${data.justification}` : ''}
+${data.comments ? `${data.status === 'REJECTED' ? 'Rejection Reason' : 'Comments'}: ${data.comments}` : ''}
+
+${
+  data.status === 'APPROVED' ? 'Your request has been approved and assigned to the IT team for provisioning.' :
+  data.status === 'REJECTED' ? 'Please review the rejection reason and submit a new request if needed.' :
+  data.status === 'PENDING_APPROVAL' ? `This request requires Level ${data.requiredLevel} approval.` :
+  'Please provision the requested resource and provide details to the user.'
+}
+
+Notification sent on ${new Date().toLocaleDateString()}
     `
   })
 }
@@ -275,6 +453,28 @@ export async function sendEmail(to: string, templateType: 'projectInvitation' | 
   }
 }
 
+// New function for approval notifications
+export async function sendApprovalNotification(to: string, templateData: ApprovalNotificationData) {
+  try {
+    const template = emailTemplates.approvalNotification(templateData)
+    
+    const mailOptions = {
+      from: `"Resource Management System" <${emailConfig.auth.user}>`,
+      to,
+      subject: template.subject,
+      html: template.html,
+      text: template.text
+    }
+
+    const info = await transporter.sendMail(mailOptions)
+    console.log('Approval notification sent successfully:', info.messageId)
+    return { success: true, messageId: info.messageId }
+  } catch (error) {
+    console.error('Failed to send approval notification:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
 // Legacy function for backward compatibility
 export async function sendProjectInvitationEmail(to: string, templateData: ProjectInvitationData) {
   return sendEmail(to, 'projectInvitation', templateData)
@@ -283,6 +483,137 @@ export async function sendProjectInvitationEmail(to: string, templateData: Proje
 // New function for resource request notifications
 export async function sendResourceRequestNotification(to: string, templateData: ResourceRequestNotificationData) {
   return sendEmail(to, 'resourceRequestNotification', templateData)
+}
+
+// Interface for task completion notification email data
+interface TaskCompletionNotificationData {
+  requestId: string
+  userEmail: string
+  userName: string
+  projectName: string
+  phaseName: string
+  resourceType: string
+  completionNotes: string
+  credentials: Array<{
+    label: string
+    value: string
+    type: string
+  }>
+  completedBy: string
+  requestUrl: string
+}
+
+// New function for task completion notifications
+export async function sendTaskCompletionNotification(to: string, data: TaskCompletionNotificationData) {
+  try {
+    const subject = `🎉 Resource Request Completed - ${data.resourceType} for ${data.projectName}`
+    
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+          <h1 style="margin: 0; font-size: 24px;">✅ Resource Request Completed!</h1>
+          <p style="margin: 10px 0 0 0; opacity: 0.9;">Your resource is ready to use</p>
+        </div>
+        
+        <div style="background-color: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <div style="margin-bottom: 25px;">
+            <h2 style="color: #374151; margin-bottom: 15px; font-size: 18px;">Request Details</h2>
+            <div style="background-color: #f3f4f6; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+              <p style="margin: 5px 0;"><strong>Project:</strong> ${data.projectName}</p>
+              <p style="margin: 5px 0;"><strong>Phase:</strong> ${data.phaseName}</p>
+              <p style="margin: 5px 0;"><strong>Resource Type:</strong> ${data.resourceType}</p>
+              <p style="margin: 5px 0;"><strong>Request ID:</strong> ${data.requestId}</p>
+              <p style="margin: 5px 0;"><strong>Completed by:</strong> ${data.completedBy}</p>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 25px;">
+            <h3 style="color: #374151; margin-bottom: 10px;">Completion Notes</h3>
+            <div style="background-color: #f0f9ff; border-left: 4px solid #3b82f6; padding: 15px; border-radius: 0 6px 6px 0;">
+              <p style="margin: 0; line-height: 1.6;">${data.completionNotes}</p>
+            </div>
+          </div>
+
+          ${data.credentials && data.credentials.length > 0 ? `
+          <div style="margin-bottom: 25px;">
+            <h3 style="color: #374151; margin-bottom: 15px;">🔐 Access Credentials</h3>
+            <div style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+              <p style="margin: 0 0 10px 0; color: #92400e; font-weight: bold;">⚠️ Important: Keep these credentials secure</p>
+              <p style="margin: 0; color: #92400e; font-size: 14px;">Please store these credentials safely and do not share them with unauthorized users.</p>
+            </div>
+            <div style="background-color: #f9fafb; border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden;">
+              ${data.credentials.map(cred => `
+                <div style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-weight: 600; color: #374151;">${cred.label}:</span>
+                  <span style="font-family: 'Courier New', monospace; background-color: #f3f4f6; padding: 4px 8px; border-radius: 4px; color: #1f2937;">${cred.type === 'password' ? '••••••••' : cred.value}</span>
+                </div>
+              `).join('')}
+            </div>
+            ${data.credentials.some(cred => cred.type === 'password') ? `
+              <p style="margin: 10px 0 0 0; font-size: 12px; color: #6b7280;">
+                * Passwords are hidden for security. Check your secure communication channel for full credentials.
+              </p>
+            ` : ''}
+          </div>
+          ` : ''}
+
+          <div style="text-align: center; margin-top: 30px;">
+            <a href="${data.requestUrl}" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+              View Request Details
+            </a>
+          </div>
+
+          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #6b7280;">
+            <p style="margin: 0;">Need help? Contact the IT team or system administrator.</p>
+            <p style="margin: 5px 0 0 0;">This is an automated message from the Resource Management System.</p>
+          </div>
+        </div>
+      </div>
+    `
+
+    const text = `
+Resource Request Completed!
+
+Your resource request has been completed and is ready to use.
+
+Request Details:
+- Project: ${data.projectName}
+- Phase: ${data.phaseName}
+- Resource Type: ${data.resourceType}
+- Request ID: ${data.requestId}
+- Completed by: ${data.completedBy}
+
+Completion Notes:
+${data.completionNotes}
+
+${data.credentials && data.credentials.length > 0 ? `
+Access Credentials:
+${data.credentials.map(cred => `${cred.label}: ${cred.type === 'password' ? '[Hidden for security]' : cred.value}`).join('\n')}
+
+⚠️ Important: Keep these credentials secure and do not share them with unauthorized users.
+` : ''}
+
+View full details: ${data.requestUrl}
+
+Need help? Contact the IT team or system administrator.
+This is an automated message from the Resource Management System.
+    `
+
+    const mailOptions = {
+      from: `"Resource Management System" <${emailConfig.auth.user}>`,
+      to,
+      subject,
+      html,
+      text
+    }
+
+    const info = await transporter.sendMail(mailOptions)
+    console.log('Task completion notification sent successfully:', info.messageId)
+    return { success: true, messageId: info.messageId }
+  } catch (error) {
+    console.error('Failed to send task completion notification:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
 }
 
 // Test email connection

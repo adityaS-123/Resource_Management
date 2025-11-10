@@ -16,40 +16,41 @@ export default function Navigation() {
   if (!session) return null
 
   return (
-    <nav className="nav-enhanced sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
+    <nav className="nav-enhanced sticky top-0 z-50 backdrop-blur-lg border-b border-border/10">
+      <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-10">
+        <div className="flex justify-between h-20">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
-              <Link href="/dashboard" className="flex items-center space-x-4 hover-lift">
-                <div className="p-2 rounded-xl bg-black shadow-lg border border-gray-200">
+              <Link href="/dashboard" className="flex items-center space-x-5 group hover:scale-105 transition-transform duration-300">
+                <div className="relative p-3 rounded-2xl bg-gradient-to-br from-primary to-primary/80 shadow-2xl border border-primary/20 group-hover:shadow-primary/20 transition-all duration-300">
                   <Image
                     src="/amnex-logo.png"
                     alt="Amnex Logo"
-                    width={56}
-                    height={56}
-                    className="object-contain"
+                    width={52}
+                    height={52}
+                    className="object-contain drop-shadow-md"
                     priority
                   />
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 to-transparent"></div>
                 </div>
-                <div className="flex flex-col">
-                  <h1 className="text-xl font-bold text-primary leading-tight">
+                <div className="flex flex-col space-y-1">
+                  <h1 className="text-2xl font-bold bg-gradient-to-r from-primary via-primary/90 to-primary/80 bg-clip-text text-transparent leading-tight tracking-tight">
                     Resource Management
                   </h1>
-                  <p className="text-xs text-muted-foreground">Powered by Amnex</p>
+                  <p className="text-sm text-muted-foreground/80 font-medium tracking-wide">Powered by Amnex</p>
                 </div>
               </Link>
             </div>
-            <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-              {session.user.role === 'ADMIN' ? (
+            <div className="hidden sm:ml-8 sm:flex sm:space-x-2">
+              {session.user.role === 'ADMIN' || session.user.userRole === 'ADMIN' ? (
                 <>
                   <Link
                     href="/admin/dashboard"
                     className={`${
                       isActive('/admin/dashboard')
-                        ? 'border-primary text-primary bg-primary/5'
-                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-primary/30'
-                    } inline-flex items-center px-3 py-1 border-b-2 text-sm font-medium rounded-t-md transition-all duration-200`}
+                        ? 'bg-primary/10 text-primary border-primary/20 shadow-md'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border'
+                    } inline-flex items-center px-4 py-3 border rounded-xl text-sm font-semibold transition-all duration-300 hover:shadow-md`}
                   >
                     Dashboard
                   </Link>
@@ -57,9 +58,9 @@ export default function Navigation() {
                     href="/admin/projects"
                     className={`${
                       isActive('/admin/projects')
-                        ? 'border-primary text-primary bg-primary/5'
-                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-primary/30'
-                    } inline-flex items-center px-3 py-1 border-b-2 text-sm font-medium rounded-t-md transition-all duration-200`}
+                        ? 'bg-primary/10 text-primary border-primary/20 shadow-md'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border'
+                    } inline-flex items-center px-4 py-3 border rounded-xl text-sm font-semibold transition-all duration-300 hover:shadow-md`}
                   >
                     Projects
                   </Link>
@@ -67,11 +68,44 @@ export default function Navigation() {
                     href="/admin/resource-templates"
                     className={`${
                       isActive('/admin/resource-templates')
+                        ? 'bg-primary/10 text-primary border-primary/20 shadow-md'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border'
+                    } inline-flex items-center px-4 py-3 border rounded-xl text-sm font-semibold transition-all duration-300 hover:shadow-md`}
+                  >
+                    Templates
+                  </Link>
+                  <Link
+                    href="/admin/requests"
+                    className={`${
+                      isActive('/admin/requests')
+                        ? 'bg-primary/10 text-primary border-primary/20 shadow-md'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border'
+                    } inline-flex items-center px-4 py-3 border rounded-xl text-sm font-semibold transition-all duration-300 hover:shadow-md`}
+                  >
+                    Requests
+                  </Link>
+                  <Link
+                    href="/admin/it-tasks"
+                    className={`${
+                      isActive('/admin/it-tasks')
+                        ? 'bg-primary/10 text-primary border-primary/20 shadow-md'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border'
+                    } inline-flex items-center px-4 py-3 border rounded-xl text-sm font-semibold transition-all duration-300 hover:shadow-md`}
+                  >
+                    IT Tasks
+                  </Link>
+                </>
+              ) : session.user.userRole === 'DEPARTMENT_HEAD' || session.user.userRole === 'IT_HEAD' ? (
+                <>
+                  <Link
+                    href="/dashboard"
+                    className={`${
+                      isActive('/dashboard')
                         ? 'border-primary text-primary bg-primary/5'
                         : 'border-transparent text-muted-foreground hover:text-foreground hover:border-primary/30'
                     } inline-flex items-center px-3 py-1 border-b-2 text-sm font-medium rounded-t-md transition-all duration-200`}
                   >
-                    Resource Templates
+                    Dashboard
                   </Link>
                   <Link
                     href="/admin/requests"
@@ -81,7 +115,50 @@ export default function Navigation() {
                         : 'border-transparent text-muted-foreground hover:text-foreground hover:border-primary/30'
                     } inline-flex items-center px-3 py-1 border-b-2 text-sm font-medium rounded-t-md transition-all duration-200`}
                   >
-                    Requests
+                    Approve Requests
+                  </Link>
+                  <Link
+                    href="/my-requests"
+                    className={`${
+                      isActive('/my-requests')
+                        ? 'border-primary text-primary bg-primary/5'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-primary/30'
+                    } inline-flex items-center px-3 py-1 border-b-2 text-sm font-medium rounded-t-md transition-all duration-200`}
+                  >
+                    My Requests
+                  </Link>
+                </>
+              ) : session.user.userRole === 'IT_TEAM' ? (
+                <>
+                  <Link
+                    href="/dashboard"
+                    className={`${
+                      isActive('/dashboard')
+                        ? 'border-primary text-primary bg-primary/5'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-primary/30'
+                    } inline-flex items-center px-3 py-1 border-b-2 text-sm font-medium rounded-t-md transition-all duration-200`}
+                  >
+                    Dashboard
+                  </Link>
+                  <Link
+                    href="/admin/it-tasks"
+                    className={`${
+                      isActive('/admin/it-tasks')
+                        ? 'border-primary text-primary bg-primary/5'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-primary/30'
+                    } inline-flex items-center px-3 py-1 border-b-2 text-sm font-medium rounded-t-md transition-all duration-200`}
+                  >
+                    IT Tasks
+                  </Link>
+                  <Link
+                    href="/my-requests"
+                    className={`${
+                      isActive('/my-requests')
+                        ? 'border-primary text-primary bg-primary/5'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-primary/30'
+                    } inline-flex items-center px-3 py-1 border-b-2 text-sm font-medium rounded-t-md transition-all duration-200`}
+                  >
+                    My Requests
                   </Link>
                 </>
               ) : (
@@ -97,9 +174,19 @@ export default function Navigation() {
                     Dashboard
                   </Link>
                   <Link
-                    href="/user/requests"
+                    href="/user/assigned-tasks"
                     className={`${
-                      isActive('/user/requests')
+                      isActive('/user/assigned-tasks')
+                        ? 'border-primary text-primary bg-primary/5'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-primary/30'
+                    } inline-flex items-center px-3 py-1 border-b-2 text-sm font-medium rounded-t-md transition-all duration-200`}
+                  >
+                    My Assigned Tasks
+                  </Link>
+                  <Link
+                    href="/my-requests"
+                    className={`${
+                      isActive('/my-requests')
                         ? 'border-primary text-primary bg-primary/5'
                         : 'border-transparent text-muted-foreground hover:text-foreground hover:border-primary/30'
                     } inline-flex items-center px-3 py-1 border-b-2 text-sm font-medium rounded-t-md transition-all duration-200`}
@@ -110,20 +197,29 @@ export default function Navigation() {
               )}
             </div>
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="hidden sm:flex items-center px-3 py-1 rounded-full bg-secondary/50 border border-border/30">
-              <span className="text-sm font-medium text-secondary-foreground">
-                {session.user.name}
-              </span>
-              <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary rounded-full border border-primary/20">
-                {session.user.role}
-              </span>
+          <div className="flex items-center space-x-6">
+            <div className="hidden sm:flex items-center px-5 py-3 rounded-2xl bg-gradient-to-r from-muted/50 to-muted/30 border border-border/40 shadow-lg backdrop-blur-sm">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/20">
+                  <span className="text-sm font-bold text-primary">
+                    {session.user.name?.charAt(0).toUpperCase() || 'U'}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-foreground">
+                    {session.user.name}
+                  </span>
+                  <span className="text-xs px-2 py-1 bg-primary/15 text-primary rounded-lg border border-primary/20 font-medium">
+                    {session.user.userRole || session.user.role}
+                  </span>
+                </div>
+              </div>
             </div>
             <ThemeToggle />
             <Button 
               variant="outline" 
               onClick={() => signOut({ callbackUrl: '/login' })}
-              className="btn-secondary hover-lift"
+              className="px-6 py-3 rounded-xl font-semibold transition-all duration-300 hover:shadow-lg hover:scale-105"
             >
               Sign Out
             </Button>

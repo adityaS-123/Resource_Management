@@ -28,7 +28,7 @@ interface ResourceRequest {
   requestedConfig: string
   requestedQty: number
   justification: string | null
-  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED' | 'IN_PROGRESS' | 'ASSIGNED_TO_IT'
   createdAt: string
   rejectionReason: string | null
   phase: {
@@ -54,7 +54,7 @@ interface ResourceRequest {
 export default function UserRequestsPage() {
   const [requests, setRequests] = useState<ResourceRequest[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL')
+  const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED' | 'IN_PROGRESS' | 'ASSIGNED_TO_IT'>('ALL')
 
   // Helper function to parse and display configuration
   const renderConfiguration = (configString: string) => {
@@ -133,23 +133,19 @@ export default function UserRequestsPage() {
   const getStatusBadge = (request: ResourceRequest) => {
     const colors = {
       PENDING: 'bg-yellow-100 text-yellow-800',
+      IN_PROGRESS: 'bg-blue-100 text-blue-800',
       APPROVED: 'bg-green-100 text-green-800',
+      ASSIGNED_TO_IT: 'bg-purple-100 text-purple-800',
+      COMPLETED: 'bg-emerald-100 text-emerald-800',
       REJECTED: 'bg-red-100 text-red-800'
     }
-
-    // Auto-approved if it's a project resource (has resourceId) and is approved
-    const isAutoApproved = request.status === 'APPROVED' && !!request.resourceId
 
     return (
       <div className="flex flex-col gap-1">
         <Badge className={colors[request.status as keyof typeof colors]}>
-          {request.status}
+          {request.status === 'ASSIGNED_TO_IT' ? 'Assigned to IT' : 
+           request.status === 'IN_PROGRESS' ? 'In Progress' : request.status}
         </Badge>
-        {isAutoApproved && (
-          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
-            Auto-approved
-          </Badge>
-        )}
       </div>
     )
   }
@@ -186,7 +182,7 @@ export default function UserRequestsPage() {
 
           {/* Filter Buttons */}
           <div className="flex space-x-2 mb-6">
-            {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((status) => (
+            {['ALL', 'PENDING', 'IN_PROGRESS', 'APPROVED', 'ASSIGNED_TO_IT', 'COMPLETED', 'REJECTED'].map((status) => (
               <Button
                 key={status}
                 variant={filter === status ? 'default' : 'outline'}

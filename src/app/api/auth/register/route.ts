@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   try {
-    const { name, email, password, role = 'USER' } = await request.json()
+    const { name, email, password, role = 'USER', departmentId } = await request.json()
 
     if (!name || !email || !password) {
       return NextResponse.json(
@@ -24,6 +24,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate department if provided
+    if (departmentId) {
+      const department = await prisma.department.findUnique({
+        where: { id: departmentId }
+      })
+      
+      if (!department) {
+        return NextResponse.json(
+          { error: 'Invalid department selected' },
+          { status: 400 }
+        )
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(password, 12)
 
     const user = await prisma.user.create({
@@ -31,7 +45,12 @@ export async function POST(request: NextRequest) {
         name,
         email,
         password: hashedPassword,
-        role: role as 'ADMIN' | 'USER'
+        role: role as 'ADMIN' | 'USER',
+        departmentId: departmentId || null,
+        userRole: departmentId ? 'REGULAR_USER' : undefined
+      },
+      include: {
+        department: true
       }
     })
 

@@ -26,6 +26,7 @@ interface ResourceTemplate {
   name: string
   description?: string
   isActive: boolean
+  approvalLevels: number
   fields: ResourceField[]
   createdAt: string
   updatedAt: string
@@ -44,7 +45,8 @@ export default function ResourceTemplatesPage() {
   const [newTemplate, setNewTemplate] = useState({
     name: '',
     description: '',
-    isActive: true
+    isActive: true,
+    approvalLevels: 1 // Minimum Level 1 approval required
   })
   const [newTemplateFields, setNewTemplateFields] = useState<Omit<ResourceField, 'id' | 'sortOrder'>[]>([])
   const [createError, setCreateError] = useState<string | null>(null)
@@ -133,7 +135,7 @@ export default function ResourceTemplatesPage() {
   }
 
   const handleCreateTemplate = () => {
-    setNewTemplate({ name: '', description: '', isActive: true })
+    setNewTemplate({ name: '', description: '', isActive: true, approvalLevels: 1 })
     setNewTemplateFields([])
     setCreateError(null)
     setShowCreateModal(true)
@@ -141,7 +143,7 @@ export default function ResourceTemplatesPage() {
 
   const closeCreateModal = () => {
     setShowCreateModal(false)
-    setNewTemplate({ name: '', description: '', isActive: true })
+    setNewTemplate({ name: '', description: '', isActive: true, approvalLevels: 1 })
     setNewTemplateFields([])
     setCreateError(null)
   }
@@ -195,6 +197,7 @@ export default function ResourceTemplatesPage() {
         name: newTemplate.name.trim(),
         description: newTemplate.description.trim() || undefined,
         isActive: newTemplate.isActive,
+        approvalLevels: newTemplate.approvalLevels,
         fields: newTemplateFields.map((field, index) => ({
           name: field.name.trim(),
           label: field.label.trim(),
@@ -428,6 +431,35 @@ export default function ResourceTemplatesPage() {
                         </Badge>
                       </div>
                     </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Approval Levels</label>
+                      <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={
+                            selectedTemplate.approvalLevels === 0 ? 'default' :
+                            selectedTemplate.approvalLevels === 1 ? 'secondary' :
+                            selectedTemplate.approvalLevels === 2 ? 'destructive' : 'outline'
+                          }>
+                            Level {selectedTemplate.approvalLevels}
+                          </Badge>
+                          <span className="text-sm text-gray-600 dark:text-gray-400">
+                            {selectedTemplate.approvalLevels === 1 && 'Department Head approval'}
+                            {selectedTemplate.approvalLevels === 2 && 'Department Head + IT Head approval'}
+                            {selectedTemplate.approvalLevels === 3 && 'Department Head + IT Head + Admin approval'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Approval Workflow</label>
+                      <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-md">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {selectedTemplate.approvalLevels === 1 && 'User → Department Head → IT Team'}
+                          {selectedTemplate.approvalLevels === 2 && 'User → Department Head → IT Head → IT Team'}
+                          {selectedTemplate.approvalLevels === 3 && 'User → Department Head → IT Head → Admin → IT Team'}
+                        </p>
+                      </div>
+                    </div>
                     {selectedTemplate.description && (
                       <div className="space-y-2 md:col-span-2">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
@@ -654,6 +686,40 @@ export default function ResourceTemplatesPage() {
                         <option value="active">Active</option>
                         <option value="inactive">Inactive</option>
                       </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Approval Levels *
+                      </label>
+                      <select
+                        className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        value={newTemplate.approvalLevels}
+                        onChange={(e) => setNewTemplate({ ...newTemplate, approvalLevels: parseInt(e.target.value) })}
+                      >
+                        <option value={1}>Level 1 - Department Head approval required</option>
+                        <option value={2}>Level 2 - Department Head + IT Head approval required</option>
+                        <option value={3}>Level 3 - Department Head + IT Head + Admin approval required</option>
+                      </select>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        All requests require at least Level 1 approval. Higher levels require approval from multiple stakeholders in sequence
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Approval Workflow</label>
+                      <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-md text-sm">
+                        {newTemplate.approvalLevels === 0 && (
+                          <p className="text-green-600 dark:text-green-400">✓ Requests will be automatically approved</p>
+                        )}
+                        {newTemplate.approvalLevels === 1 && (
+                          <p className="text-blue-600 dark:text-blue-400">User → Department Head → Auto-assign to IT</p>
+                        )}
+                        {newTemplate.approvalLevels === 2 && (
+                          <p className="text-orange-600 dark:text-orange-400">User → Department Head → IT Head → Auto-assign to IT</p>
+                        )}
+                        {newTemplate.approvalLevels === 3 && (
+                          <p className="text-red-600 dark:text-red-400">User → Department Head → IT Head → Admin → Auto-assign to IT</p>
+                        )}
+                      </div>
                     </div>
                     <div className="space-y-2 md:col-span-2">
                       <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>

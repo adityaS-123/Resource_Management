@@ -9,7 +9,11 @@ export default withAuth(
       authorized: ({ token, req }) => {
         // Check if user is trying to access admin routes
         if (req.nextUrl.pathname.startsWith('/admin')) {
-          return token?.role === 'ADMIN'
+          return token?.role === 'ADMIN' || 
+                 token?.userRole === 'ADMIN' || 
+                 token?.userRole === 'DEPARTMENT_HEAD' || 
+                 token?.userRole === 'IT_HEAD' ||
+                 token?.userRole === 'IT_TEAM'
         }
         
         // Check if user is trying to access protected routes

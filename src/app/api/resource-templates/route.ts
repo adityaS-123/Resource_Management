@@ -40,11 +40,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { name, description, isActive, fields } = await request.json()
+    const { name, description, isActive, approvalLevels, fields } = await request.json()
 
     if (!name || !fields || !Array.isArray(fields)) {
       return NextResponse.json(
         { error: 'Missing required fields: name and fields array' },
+        { status: 400 }
+      )
+    }
+
+    // Validate approval levels - minimum Level 1 required
+    if (approvalLevels !== undefined && (approvalLevels < 1 || approvalLevels > 3)) {
+      return NextResponse.json(
+        { error: 'Approval levels must be between 1 and 3 (Level 1 minimum required)' },
         { status: 400 }
       )
     }
@@ -54,6 +62,7 @@ export async function POST(request: NextRequest) {
         name,
         description,
         isActive: isActive !== undefined ? isActive : true,
+        approvalLevels: approvalLevels !== undefined ? Math.max(approvalLevels, 1) : 1, // Minimum Level 1
         fields: {
           create: fields.map((field: any, index: number) => ({
             name: field.name,
